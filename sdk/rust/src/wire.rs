@@ -87,7 +87,7 @@ fn write_text(s:&str,out:&mut Vec<u8>){
 }
 fn write(v:&Value,out:&mut Vec<u8>){
     match v{Value::Null=>out.extend_from_slice(b"null"),Value::Bool(b)=>out.extend_from_slice(if *b{b"true"}else{b"false"}),Value::Text(s)=>write_text(s,out),Value::Int(n)=>{
-        let mut n=*n as i64;if n<0{out.push(b'-');n=-n;}let mut buf=[0u8;10];let mut i=10;loop{i-=1;buf[i]=b'0'+(n%10) as u8;n/=10;if n==0{break;}}out.extend_from_slice(&buf[i..]);},
+        let mut n=*n as i64;if n<0{out.push(b'-');n=-n;}let mut buf=[0u8;10];let mut i=10;loop{i-=1;*buf.get_mut(i).unwrap()=b'0'+(n%10) as u8;n/=10;if n==0{break;}}out.extend_from_slice(buf.get(i..).unwrap());},
         Value::Array(a)=>{out.push(b'[');for(i,v)in a.iter().enumerate(){if i>0{out.push(b',');}write(v,out);}out.push(b']');},
         Value::Object(fields)=>{out.push(b'{');for(i,(n,v))in fields.iter().enumerate(){if i>0{out.push(b',');}write_text(n,out);out.push(b':');write(v,out);}out.push(b'}');}
     }

@@ -48,7 +48,8 @@ mod guest {
     unsafe impl GlobalAlloc for Arena {
         unsafe fn alloc(&self,l:Layout)->*mut u8 {
             let mut old=USED.load(Ordering::Relaxed);
-            loop {let aligned=(old+l.align()-1)&!(l.align()-1);let Some(end)=aligned.checked_add(l.size()) else{return core::ptr::null_mut();};if end>8*1024*1024{return core::ptr::null_mut();}
+            let base=core::ptr::addr_of_mut!(HEAP.0).cast::<u8>() as usize;
+            loop {let Some(address)=base.checked_add(old).and_then(|v|v.checked_add(l.align()-1)) else{return core::ptr::null_mut();};let aligned=(address&!(l.align()-1))-base;let Some(end)=aligned.checked_add(l.size()) else{return core::ptr::null_mut();};if end>8*1024*1024{return core::ptr::null_mut();}
                 match USED.compare_exchange_weak(old,end,Ordering::Relaxed,Ordering::Relaxed){Ok(_)=>return unsafe{core::ptr::addr_of_mut!(HEAP.0).cast::<u8>().add(aligned)},Err(v)=>old=v}
             }
         }

@@ -42,7 +42,7 @@ impl<'a> Parser<'a>{
     fn peek(&self)->Option<u8>{self.text.as_bytes().get(self.pos).copied()}
     fn ws(&mut self){while self.peek().is_some_and(|b|b" \t\r\n".contains(&b)){self.pos+=1;}}
     fn byte(&mut self,b:u8)->Result<(),Error>{ensure(self.peek()==Some(b))?;self.pos+=1;Ok(())}
-    fn literal(&mut self,token:&str)->Result<(),Error>{ensure(self.text[self.pos..].starts_with(token))?;self.pos+=token.len();Ok(())}
+    fn literal(&mut self,token:&str)->Result<(),Error>{ensure(self.text.get(self.pos..).ok_or(Error::Json)?.starts_with(token))?;self.pos+=token.len();Ok(())}
     fn hex4(&mut self)->Result<u32,Error>{
         let mut n=0;for _ in 0..4{let b=self.peek().ok_or(Error::Json)?;self.pos+=1;let d=match b{b'0'..=b'9'=>b-b'0',b'a'..=b'f'=>b-b'a'+10,b'A'..=b'F'=>b-b'A'+10,_=>return Err(Error::Json)};n=n*16+d as u32;}Ok(n)
     }
@@ -57,7 +57,7 @@ impl<'a> Parser<'a>{
                     else{ensure(!(0xdc00..=0xdfff).contains(&n))?;}
                     s.push(char::from_u32(n).ok_or(Error::Json)?);
                 },_=>return Err(Error::Json)}
-            }else{ensure(b>=32)?;let c=self.text[self.pos..].chars().next().ok_or(Error::Json)?;self.pos+=c.len_utf8();s.push(c);}
+            }else{ensure(b>=32)?;let c=self.text.get(self.pos..).ok_or(Error::Json)?.chars().next().ok_or(Error::Json)?;self.pos+=c.len_utf8();s.push(c);}
         }
     }
     fn value(&mut self,depth:u32)->Result<Value,Error>{
@@ -72,7 +72,7 @@ impl<'a> Parser<'a>{
             b'-'|b'0'..=b'9'=>{let start=self.pos;if self.peek()==Some(b'-'){self.pos+=1;}
                 if self.peek()==Some(b'0'){self.pos+=1;ensure(!self.peek().is_some_and(|b|b.is_ascii_digit()))?;}
                 else{ensure(self.peek().is_some_and(|b|matches!(b,b'1'..=b'9')))?;while self.peek().is_some_and(|b|b.is_ascii_digit()){self.pos+=1;}}
-                let n=self.text[start..self.pos].parse::<i32>().map_err(|_|Error::Json)?;Ok(Value::Int(n))},
+                let n=self.text.get(start..self.pos).ok_or(Error::Json)?.parse::<i32>().map_err(|_|Error::Json)?;Ok(Value::Int(n))},
             _=>Err(Error::Json)
         }
     }

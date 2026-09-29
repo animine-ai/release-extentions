@@ -1,4 +1,4 @@
-[target.wasm32-unknown-unknown]
+[target.wasm32v1-none]
 rustflags = [
   "-C", "target-feature=-bulk-memory,-reference-types,-multivalue,-simd128",
   "-C", "link-arg=--no-entry", "-C", "link-arg=--export-memory",

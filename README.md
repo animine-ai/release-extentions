@@ -62,14 +62,14 @@ floats rather than silently rounding them. This is the exact signed-schema subse
 
 ## Build and test
 
-Install Python 3.12, Rust 1.95.0 with wasm32-unknown-unknown, and the pinned dependencies:
+Install Python 3.12, Rust 1.95.0 with wasm32v1-none, and the pinned dependencies:
 
 ```bash
 python3 -m pip install -r requirements.txt
 python3 -m unittest discover -s tests -v
 cargo +1.95.0 test --locked --workspace
 bash tools/build_fixture.sh build/fixture
-python3 tools/arex.py test-chain --module build/fixture/wasm32-unknown-unknown/release/arex_fixture.wasm --output build/test-chain --source-repository https://github.com/YOUR_ACCOUNT/YOUR_REPO --source-commit FULL_SOURCE_COMMIT
+python3 tools/arex.py test-chain --module build/fixture/wasm32v1-none/release/arex_fixture.wasm --output build/test-chain --source-repository https://github.com/YOUR_ACCOUNT/YOUR_REPO --source-commit FULL_SOURCE_COMMIT
 python3 tools/arex.py verify-chain build/test-chain
 ```
 

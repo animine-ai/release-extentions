@@ -32,7 +32,7 @@ jobs:
         working-directory: extension
         run: |
           rustup toolchain install 1.95.0 --profile minimal
-          rustup target add --toolchain 1.95.0 wasm32-unknown-unknown
+          rustup target add --toolchain 1.95.0 wasm32v1-none
           python3 -m pip install -r requirements.txt
       - name: Schemas, archive and trust vectors
         working-directory: extension
@@ -47,15 +47,15 @@ jobs:
         run: |
           bash tools/build_fixture.sh build/clean-a
           bash tools/build_fixture.sh build/clean-b
-          cmp build/clean-a/wasm32-unknown-unknown/release/arex_fixture.wasm build/clean-b/wasm32-unknown-unknown/release/arex_fixture.wasm
+          cmp build/clean-a/wasm32v1-none/release/arex_fixture.wasm build/clean-b/wasm32v1-none/release/arex_fixture.wasm
       - name: Deterministic test packages and signed chains
         working-directory: extension
         env:
           SOURCE_REPOSITORY: https://github.com/${{ github.repository }}
           SOURCE_COMMIT: ${{ github.sha }}
         run: |
-          python3 tools/arex.py test-chain --module build/clean-a/wasm32-unknown-unknown/release/arex_fixture.wasm --output build/test-chain --source-repository "$SOURCE_REPOSITORY" --source-commit "$SOURCE_COMMIT"
-          python3 tools/arex.py test-chain --module build/clean-b/wasm32-unknown-unknown/release/arex_fixture.wasm --output build/test-chain-b --source-repository "$SOURCE_REPOSITORY" --source-commit "$SOURCE_COMMIT"
+          python3 tools/arex.py test-chain --module build/clean-a/wasm32v1-none/release/arex_fixture.wasm --output build/test-chain --source-repository "$SOURCE_REPOSITORY" --source-commit "$SOURCE_COMMIT"
+          python3 tools/arex.py test-chain --module build/clean-b/wasm32v1-none/release/arex_fixture.wasm --output build/test-chain-b --source-repository "$SOURCE_REPOSITORY" --source-commit "$SOURCE_COMMIT"
           cmp build/test-chain/fixture.arex build/test-chain-b/fixture.arex
           python3 fixtures/trust/generate.py build/test-chain
           python3 tools/arex.py verify-chain build/test-chain
@@ -63,7 +63,7 @@ jobs:
         working-directory: extension
         run: |
           python3 compatibility/export_host.py ../host
-          cargo +1.95.0 run --locked --release --manifest-path compatibility/native/Cargo.toml -- build/clean-a/wasm32-unknown-unknown/release/arex_fixture.wasm fixtures/wire build/wire
+          cargo +1.95.0 run --locked --release --manifest-path compatibility/native/Cargo.toml -- build/clean-a/wasm32v1-none/release/arex_fixture.wasm fixtures/wire build/wire
           python3 tools/check_wire.py
       - name: Original Kotlin package, root, index, install and wire verifiers
         working-directory: extension

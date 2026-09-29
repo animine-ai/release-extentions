@@ -34,7 +34,9 @@ impl Fields {
     }
     pub fn take<T:Wire>(&mut self,name:&str)->Result<T,Error>{
         let i=self.0.iter().position(|(n,_)|n==name).ok_or(Error::Json)?;
-        T::from_value(self.0.remove(i).1)
+        let last=self.0.len()-1;
+        self.0.swap(i,last);
+        T::from_value(self.0.pop().ok_or(Error::Json)?.1)
     }
 }
 struct Parser<'a>{text:&'a str,pos:usize}

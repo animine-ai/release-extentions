@@ -1,0 +1,1800 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:arex:v1",
+  "$defs": {
+    "NavigationCapability": {
+      "type": "string",
+      "enum": [
+        "OVERVIEW_NAVIGATION",
+        "EPISODE_NAVIGATION"
+      ]
+    },
+    "SourceRole": {
+      "type": "string",
+      "enum": [
+        "CALENDAR",
+        "RECENT",
+        "POSTPONEMENT",
+        "DIRECT"
+      ]
+    },
+    "ExtensionMethod": {
+      "type": "string",
+      "enum": [
+        "GET"
+      ]
+    },
+    "ExtensionResponseStatus": {
+      "type": "string",
+      "enum": [
+        "OK",
+        "TRANSPORT_FAILURE",
+        "BUDGET_DENIED",
+        "CANCELLED"
+      ]
+    },
+    "ExtensionReportOutcome": {
+      "type": "string",
+      "enum": [
+        "SUCCESS",
+        "PARTIAL",
+        "FAILURE"
+      ]
+    },
+    "ObservationInstallmentKind": {
+      "type": "string",
+      "enum": [
+        "EPISODE",
+        "FILM",
+        "SPECIAL",
+        "UNKNOWN"
+      ]
+    },
+    "ObservationTrack": {
+      "type": "string",
+      "enum": [
+        "DE_SUB",
+        "DE_DUB",
+        "UNKNOWN"
+      ]
+    },
+    "ObservationClaimKind": {
+      "type": "string",
+      "enum": [
+        "FORECAST",
+        "RELEASE_LISTING",
+        "CORRECTION",
+        "DIRECT_AVAILABILITY"
+      ]
+    },
+    "ObservationScheduleMarker": {
+      "type": "string",
+      "enum": [
+        "NONE",
+        "POSTPONED",
+        "CANCELLED",
+        "RESCHEDULED",
+        "UNKNOWN"
+      ]
+    },
+    "ExtensionGuestErrorCode": {
+      "type": "string",
+      "enum": [
+        "INVALID_INPUT",
+        "UNSUPPORTED_SCHEMA",
+        "PARSE_FAILED",
+        "UNSUPPORTED_ROLE"
+      ]
+    },
+    "NavigationTargetKind": {
+      "type": "string",
+      "enum": [
+        "OVERVIEW",
+        "EPISODE"
+      ]
+    },
+    "InstallmentV1": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ObservationInstallmentKind"
+        },
+        "number": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 32
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "number"
+      ],
+      "additionalProperties": false
+    },
+    "ExtensionTargetV1": {
+      "type": "object",
+      "properties": {
+        "targetToken": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128
+        },
+        "providerSeriesKey": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 512
+        },
+        "providerUrl": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 2048
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceSeason": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9999
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "navigationSeason": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9999
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "installment": {
+          "$ref": "#/$defs/InstallmentV1"
+        },
+        "track": {
+          "$ref": "#/$defs/ObservationTrack"
+        }
+      },
+      "required": [
+        "targetToken",
+        "providerSeriesKey",
+        "providerUrl",
+        "sourceSeason",
+        "navigationSeason",
+        "installment",
+        "track"
+      ],
+      "additionalProperties": false
+    },
+    "ExtensionContextV1": {
+      "type": "object",
+      "properties": {
+        "extensionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "sourceRoles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourceRole"
+          },
+          "maxItems": 4,
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "observedAt": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 64
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ExtensionTargetV1"
+          },
+          "maxItems": 256,
+          "minItems": 0
+        }
+      },
+      "required": [
+        "extensionId",
+        "providerId",
+        "sourceRoles",
+        "observedAt",
+        "targets"
+      ],
+      "additionalProperties": false
+    },
+    "PlanInputV1": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "context": {
+          "$ref": "#/$defs/ExtensionContextV1"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "context"
+      ],
+      "additionalProperties": false
+    },
+    "RequestSpec": {
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 64
+        },
+        "sourceRole": {
+          "$ref": "#/$defs/SourceRole"
+        },
+        "url": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 2048
+        },
+        "method": {
+          "$ref": "#/$defs/ExtensionMethod"
+        },
+        "targetToken": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "requestId",
+        "sourceRole",
+        "url",
+        "method",
+        "targetToken"
+      ],
+      "additionalProperties": false
+    },
+    "PlanOutputV1": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "requests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RequestSpec"
+          },
+          "maxItems": 7,
+          "minItems": 0
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "requests"
+      ],
+      "additionalProperties": false
+    },
+    "ResponseEnvelope": {
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 64
+        },
+        "sourceRole": {
+          "$ref": "#/$defs/SourceRole"
+        },
+        "status": {
+          "$ref": "#/$defs/ExtensionResponseStatus"
+        },
+        "httpStatus": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 599
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finalUrl": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 2048
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bodyUtf8": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 2097152
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceHash": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "requestId",
+        "sourceRole",
+        "status",
+        "httpStatus",
+        "finalUrl",
+        "bodyUtf8",
+        "sourceHash"
+      ],
+      "additionalProperties": false
+    },
+    "ParseInputV1": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "context": {
+          "$ref": "#/$defs/ExtensionContextV1"
+        },
+        "responses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ResponseEnvelope"
+          },
+          "maxItems": 7,
+          "minItems": 0
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "context",
+        "responses"
+      ],
+      "additionalProperties": false
+    },
+    "ObservationDiagnosticV1": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 64
+        },
+        "message": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "ProviderObservationV1": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "extensionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "requestId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 64
+        },
+        "sourceRole": {
+          "$ref": "#/$defs/SourceRole"
+        },
+        "providerSeriesKey": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 512
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rawTitle": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 1024
+        },
+        "sourceSeason": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9999
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "navigationSeason": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9999
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "installment": {
+          "$ref": "#/$defs/InstallmentV1"
+        },
+        "track": {
+          "$ref": "#/$defs/ObservationTrack"
+        },
+        "claimKind": {
+          "$ref": "#/$defs/ObservationClaimKind"
+        },
+        "sourceDateText": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceTimeText": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceRawText": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 2048
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "parsedTimestamp": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 64
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "approximate": {
+          "type": "boolean"
+        },
+        "scheduleMarker": {
+          "$ref": "#/$defs/ObservationScheduleMarker"
+        },
+        "correctionMarker": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 512
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceUrl": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 2048
+        },
+        "sourceHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObservationDiagnosticV1"
+          },
+          "maxItems": 16,
+          "minItems": 0
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "extensionId",
+        "providerId",
+        "requestId",
+        "sourceRole",
+        "providerSeriesKey",
+        "rawTitle",
+        "sourceSeason",
+        "navigationSeason",
+        "installment",
+        "track",
+        "claimKind",
+        "sourceDateText",
+        "sourceTimeText",
+        "sourceRawText",
+        "parsedTimestamp",
+        "approximate",
+        "scheduleMarker",
+        "correctionMarker",
+        "sourceUrl",
+        "sourceHash",
+        "diagnostics"
+      ],
+      "additionalProperties": false
+    },
+    "ResponseReportV1": {
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 64
+        },
+        "outcome": {
+          "$ref": "#/$defs/ExtensionReportOutcome"
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObservationDiagnosticV1"
+          },
+          "maxItems": 16,
+          "minItems": 0
+        }
+      },
+      "required": [
+        "requestId",
+        "outcome",
+        "diagnostics"
+      ],
+      "additionalProperties": false
+    },
+    "ParseOutputV1": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "observations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProviderObservationV1"
+          },
+          "maxItems": 512,
+          "minItems": 0
+        },
+        "responseReports": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ResponseReportV1"
+          },
+          "maxItems": 7,
+          "minItems": 0
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "observations",
+        "responseReports"
+      ],
+      "additionalProperties": false
+    },
+    "NavigationContextV1": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "extensionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "observedAt": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 64
+        },
+        "targetKind": {
+          "$ref": "#/$defs/NavigationTargetKind"
+        },
+        "targetToken": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128
+        },
+        "providerSeriesKey": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 512
+        },
+        "providerRouteHint": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 2048
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceSeason": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9999
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "providerEpisode": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 32
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "track": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ObservationTrack"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "extensionId",
+        "providerId",
+        "observedAt",
+        "targetKind",
+        "targetToken",
+        "providerSeriesKey",
+        "providerRouteHint",
+        "sourceSeason",
+        "providerEpisode",
+        "track"
+      ],
+      "additionalProperties": false
+    },
+    "NavigationRequestSpecV1": {
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 64
+        },
+        "url": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 2048
+        }
+      },
+      "required": [
+        "requestId",
+        "url"
+      ],
+      "additionalProperties": false
+    },
+    "NavigationPlanOutputV1": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "requests": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NavigationRequestSpecV1"
+          },
+          "maxItems": 7,
+          "minItems": 0
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "requests"
+      ],
+      "additionalProperties": false
+    },
+    "NavigationResponseEnvelopeV1": {
+      "type": "object",
+      "properties": {
+        "requestId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 64
+        },
+        "status": {
+          "$ref": "#/$defs/ExtensionResponseStatus"
+        },
+        "httpStatus": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 599
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "finalUrl": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 2048
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bodyUtf8": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 2097152
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceHash": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "requestId",
+        "status",
+        "httpStatus",
+        "finalUrl",
+        "bodyUtf8",
+        "sourceHash"
+      ],
+      "additionalProperties": false
+    },
+    "ProviderNavigationTargetV1": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "extensionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "targetKind": {
+          "$ref": "#/$defs/NavigationTargetKind"
+        },
+        "providerSeriesKey": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 512
+        },
+        "sourceSeason": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9999
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "providerEpisode": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 32
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "track": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ObservationTrack"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "url": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 2048
+        },
+        "requestId": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 64
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceHash": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObservationDiagnosticV1"
+          },
+          "maxItems": 16,
+          "minItems": 0
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "extensionId",
+        "providerId",
+        "targetKind",
+        "providerSeriesKey",
+        "sourceSeason",
+        "providerEpisode",
+        "track",
+        "url",
+        "requestId",
+        "sourceHash",
+        "diagnostics"
+      ],
+      "additionalProperties": false
+    },
+    "NavigationParseOutputV1": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProviderNavigationTargetV1"
+          },
+          "maxItems": 1,
+          "minItems": 0
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "targets"
+      ],
+      "additionalProperties": false
+    },
+    "NavigationParseInputV1": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "context": {
+          "$ref": "#/$defs/NavigationContextV1"
+        },
+        "responses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NavigationResponseEnvelopeV1"
+          },
+          "maxItems": 7,
+          "minItems": 0
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "context",
+        "responses"
+      ],
+      "additionalProperties": false
+    },
+    "GuestError": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/ExtensionGuestErrorCode"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "additionalProperties": false
+    },
+    "ErrorOutputV1": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "error": {
+          "$ref": "#/$defs/GuestError"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "Digest": {
+      "type": "object",
+      "properties": {
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "sha256",
+        "bytes"
+      ],
+      "additionalProperties": false
+    },
+    "Build": {
+      "type": "object",
+      "properties": {
+        "toolchainVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "lockfileDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "workflowIdentity": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        }
+      },
+      "required": [
+        "toolchainVersion",
+        "target",
+        "lockfileDigest",
+        "workflowIdentity"
+      ],
+      "additionalProperties": false
+    },
+    "Manifest": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "extensionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+        },
+        "releaseSequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "hostApiMin": {
+          "const": 1
+        },
+        "hostApiMax": {
+          "const": 1
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourceRole"
+          },
+          "maxItems": 4,
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "navigationCapabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NavigationCapability"
+          },
+          "maxItems": 2,
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "allowedHosts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 253,
+            "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "digests": {
+          "type": "object",
+          "properties": {
+            "module": {
+              "$ref": "#/$defs/Digest"
+            },
+            "provenance": {
+              "$ref": "#/$defs/Digest"
+            },
+            "notice": {
+              "$ref": "#/$defs/Digest"
+            }
+          },
+          "required": [
+            "module",
+            "provenance",
+            "notice"
+          ],
+          "additionalProperties": false
+        },
+        "publisherId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "keyId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "sourceRepository": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "sourceCommit": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "build": {
+          "$ref": "#/$defs/Build"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "extensionId",
+        "providerId",
+        "displayName",
+        "version",
+        "releaseSequence",
+        "hostApiMin",
+        "hostApiMax",
+        "capabilities",
+        "navigationCapabilities",
+        "allowedHosts",
+        "digests",
+        "publisherId",
+        "keyId",
+        "sourceRepository",
+        "sourceCommit",
+        "build"
+      ],
+      "additionalProperties": false
+    },
+    "Provenance": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "sourceRepository": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "sourceCommit": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "licenseSpdx": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "maxItems": 256,
+          "minItems": 1
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "origin": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "licenseSpdx": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              }
+            },
+            "required": [
+              "name",
+              "origin",
+              "path",
+              "licenseSpdx"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 256,
+          "minItems": 0
+        },
+        "localModifications": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "maxItems": 256,
+          "minItems": 0
+        },
+        "compilerVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "sdkVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "dependencyLockDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "reproducibleBuildCommand": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "workflowIdentity": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "moduleDigest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "sourceRepository",
+        "sourceCommit",
+        "licenseSpdx",
+        "components",
+        "localModifications",
+        "compilerVersion",
+        "sdkVersion",
+        "dependencyLockDigest",
+        "reproducibleBuildCommand",
+        "workflowIdentity",
+        "moduleDigest"
+      ],
+      "additionalProperties": false
+    },
+    "Signature": {
+      "type": "object",
+      "properties": {
+        "algorithm": {
+          "const": "Ed25519"
+        },
+        "keyId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "signature": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]{86}==$"
+        }
+      },
+      "required": [
+        "algorithm",
+        "keyId",
+        "signature"
+      ],
+      "additionalProperties": false
+    },
+    "PublicKey": {
+      "type": "object",
+      "properties": {
+        "keyId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "publicKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]{43}=$"
+        }
+      },
+      "required": [
+        "keyId",
+        "publicKey"
+      ],
+      "additionalProperties": false
+    },
+    "Role": {
+      "type": "object",
+      "properties": {
+        "threshold": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "keyIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "threshold",
+        "keyIds"
+      ],
+      "additionalProperties": false
+    },
+    "Publisher": {
+      "type": "object",
+      "properties": {
+        "publisherId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "extensionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "keyId": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourceRole"
+          },
+          "maxItems": 4,
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "navigation": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NavigationCapability"
+          },
+          "maxItems": 4,
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "hosts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 253,
+            "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "notBefore": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "expiresAt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        }
+      },
+      "required": [
+        "publisherId",
+        "extensionId",
+        "providerId",
+        "keyId",
+        "roles",
+        "navigation",
+        "hosts",
+        "notBefore",
+        "expiresAt"
+      ],
+      "additionalProperties": false
+    },
+    "RootSigned": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "repositoryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "expiresAt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PublicKey"
+          },
+          "maxItems": 32,
+          "minItems": 1
+        },
+        "roles": {
+          "type": "object",
+          "properties": {
+            "root": {
+              "$ref": "#/$defs/Role"
+            },
+            "index": {
+              "$ref": "#/$defs/Role"
+            }
+          },
+          "required": [
+            "root",
+            "index"
+          ],
+          "additionalProperties": false
+        },
+        "publishers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Publisher"
+          },
+          "maxItems": 32,
+          "minItems": 0
+        },
+        "revokedKeys": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "maxItems": 32,
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "revokedDigests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "maxItems": 256,
+          "minItems": 0,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "repositoryId",
+        "version",
+        "expiresAt",
+        "keys",
+        "roles",
+        "publishers",
+        "revokedKeys",
+        "revokedDigests"
+      ],
+      "additionalProperties": false
+    },
+    "IndexEntry": {
+      "type": "object",
+      "properties": {
+        "extensionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "navigationCapabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/NavigationCapability"
+          },
+          "maxItems": 2,
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "publisherId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "keyId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+        },
+        "releaseSequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "hostApiMin": {
+          "const": 1
+        },
+        "hostApiMax": {
+          "const": 1
+        },
+        "packageUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "archiveSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "archiveBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8388608
+        },
+        "manifestSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "yanked": {
+          "type": "boolean"
+        },
+        "revoked": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "extensionId",
+        "providerId",
+        "displayName",
+        "navigationCapabilities",
+        "publisherId",
+        "keyId",
+        "version",
+        "releaseSequence",
+        "hostApiMin",
+        "hostApiMax",
+        "packageUrl",
+        "archiveSha256",
+        "archiveBytes",
+        "manifestSha256",
+        "yanked",
+        "revoked"
+      ],
+      "additionalProperties": false
+    },
+    "IndexSigned": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "repositoryId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "rootVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "issuedAt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "expiresAt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/IndexEntry"
+          },
+          "maxItems": 256,
+          "minItems": 0
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "repositoryId",
+        "rootVersion",
+        "sequence",
+        "issuedAt",
+        "expiresAt",
+        "entries"
+      ],
+      "additionalProperties": false
+    },
+    "Root": {
+      "type": "object",
+      "properties": {
+        "signed": {
+          "$ref": "#/$defs/RootSigned"
+        },
+        "signatures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Signature"
+          },
+          "maxItems": 32,
+          "minItems": 1
+        }
+      },
+      "required": [
+        "signed",
+        "signatures"
+      ],
+      "additionalProperties": false
+    },
+    "Index": {
+      "type": "object",
+      "properties": {
+        "signed": {
+          "$ref": "#/$defs/IndexSigned"
+        },
+        "signatures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Signature"
+          },
+          "maxItems": 32,
+          "minItems": 1
+        }
+      },
+      "required": [
+        "signed",
+        "signatures"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

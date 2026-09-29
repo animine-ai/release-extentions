@@ -1,0 +1,15 @@
+name: Protected release signing boundary
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  release-prerequisites:
+    runs-on: ubuntu-24.04
+    environment: production-signing
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Refuse publication while production trust is unprovisioned
+        run: |
+          echo 'Production release disabled: reviewed public keys, offline 2-of-3 custody, generic bootstrap and immutable storage are required.' >&2
+          exit 1

@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "status": "UNPROVISIONED_FAIL_CLOSED",
+  "root": null,
+  "index": null,
+  "reason": "Production offline 2-of-3 key custody, generic trust bootstrap and immutable origin policy are not provisioned. No test key is promoted to production."
+}

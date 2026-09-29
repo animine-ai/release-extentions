@@ -1,0 +1,89 @@
+name: EP03 fixture and original-host compatibility
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ep03-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: extension
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: animine-ai/Anihyou
+          ref: c343b4bca3a7133330287e09de861729faf67273
+          path: host
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+        with:
+          gradle-version: '9.7.1'
+      - name: Pinned toolchain and Python dependencies
+        working-directory: extension
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup target add --toolchain 1.95.0 wasm32-unknown-unknown
+          python3 -m pip install -r requirements.txt
+      - name: Schemas, archive and trust vectors
+        working-directory: extension
+        run: |
+          python3 -m unittest discover -s tests -v
+          python3 tools/check_wire.py
+      - name: Rust SDK and fixture unit tests
+        working-directory: extension
+        run: cargo +1.95.0 test --locked --workspace
+      - name: Two independent clean fixture builds
+        working-directory: extension
+        run: |
+          bash tools/build_fixture.sh build/clean-a
+          bash tools/build_fixture.sh build/clean-b
+          cmp build/clean-a/wasm32-unknown-unknown/release/arex_fixture.wasm build/clean-b/wasm32-unknown-unknown/release/arex_fixture.wasm
+      - name: Deterministic test packages and signed chains
+        working-directory: extension
+        env:
+          SOURCE_REPOSITORY: https://github.com/${{ github.repository }}
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          python3 tools/arex.py test-chain --module build/clean-a/wasm32-unknown-unknown/release/arex_fixture.wasm --output build/test-chain --source-repository "$SOURCE_REPOSITORY" --source-commit "$SOURCE_COMMIT"
+          python3 tools/arex.py test-chain --module build/clean-b/wasm32-unknown-unknown/release/arex_fixture.wasm --output build/test-chain-b --source-repository "$SOURCE_REPOSITORY" --source-commit "$SOURCE_COMMIT"
+          cmp build/test-chain/fixture.arex build/test-chain-b/fixture.arex
+          python3 fixtures/trust/generate.py build/test-chain
+          python3 tools/arex.py verify-chain build/test-chain
+      - name: Original production native feature validation and ABI execution
+        working-directory: extension
+        run: |
+          python3 compatibility/export_host.py ../host
+          cargo +1.95.0 run --locked --release --manifest-path compatibility/native/Cargo.toml -- build/clean-a/wasm32-unknown-unknown/release/arex_fixture.wasm fixtures/wire build/wire
+          python3 tools/check_wire.py
+      - name: Original Kotlin package, root, index, install and wire verifiers
+        working-directory: extension
+        run: gradle -p compatibility/host --console=plain test
+      - name: Artifact digest inventory
+        if: success()
+        working-directory: extension
+        run: |
+          python3 tools/report.py
+      - name: Upload fixture and verification reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ep03-fixture-evidence
+          path: |
+            extension/build/test-chain/
+            extension/build/wire/
+            extension/build/report.json
+            extension/build/SHA256SUMS
+            extension/compatibility/host/build/reports/tests/
+            extension/compatibility/host/build/test-results/
+          if-no-files-found: warn
+          retention-days: 30

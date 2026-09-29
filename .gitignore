@@ -1,0 +1,8 @@
+/target/
+/build/
+**/__pycache__/
+/compatibility/host/.gradle/
+/compatibility/host/build/
+/compatibility/host/src/main/kotlin/
+/compatibility/native/src/host_engine.rs
+/compatibility/native/target/

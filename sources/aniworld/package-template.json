@@ -1,0 +1,19 @@
+{
+  "extensionId": "de.aniworld",
+  "providerId": "aniworld",
+  "displayName": "AniWorld",
+  "status": "EP04_SKELETON_NOT_PUBLISHABLE",
+  "capabilities": [
+    "CALENDAR",
+    "RECENT",
+    "POSTPONEMENT",
+    "DIRECT"
+  ],
+  "navigationCapabilities": [
+    "OVERVIEW_NAVIGATION",
+    "EPISODE_NAVIGATION"
+  ],
+  "allowedHosts": [],
+  "publisherId": null,
+  "keyId": null
+}

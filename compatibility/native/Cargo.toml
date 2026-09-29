@@ -1,0 +1,10 @@
+[package]
+name = "arex-host-native-compat"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+[workspace]
+[dependencies]
+anyhow = "=1.0.104"
+wasmtime = { version = "=48.0.3", default-features = false, features = ["runtime", "cranelift", "std", "anyhow"] }

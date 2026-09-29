@@ -29,6 +29,10 @@ class ToolsTest(unittest.TestCase):
     def test_unknown_manifest_field(self):
         m=copy.deepcopy(self.m);m['unknown']=True
         with self.assertRaises(ValueError):a.validate(m,'Manifest')
+    def test_schema_entrypoints(self):
+        for p in (a.ROOT/'sdk/schema').glob('*.schema.json'):
+            d=json.loads(p.read_text())
+            if '$ref' in d:self.assertIn(d['$ref'].split('/')[-1],a.DEFS)
     def test_missing_nullable(self):
         r={'requestId':'r','sourceRole':'CALENDAR','url':'u','method':'GET'}
         with self.assertRaises(ValueError):a.validate(r,'RequestSpec')
@@ -76,6 +80,13 @@ class ToolsTest(unittest.TestCase):
                 for n,d in files.items():
                     e=zipfile.ZipInfo(name if n=='module.wasm' else n);e.create_system=3;e.external_attr=mode<<16;z.writestr(e,d)
             with self.assertRaises(ValueError):a.read_archive(b.getvalue())
+    def test_zip_prefix_trailer_and_local_header_binding(self):
+        for bad in [b'prefix'+self.data,self.data+b'trailer',self.data[:26]+b'\0\0'+self.data[28:]]:
+            with self.assertRaises((ValueError,zipfile.BadZipFile)):a.read_archive(bad)
+    def test_full_64_unicode_display_name(self):
+        m=copy.deepcopy(self.m);m['displayName']='😀'*64;a.validate(m,'Manifest')
+        m['displayName']='😀'*65
+        with self.assertRaises(ValueError):a.validate(m,'Manifest')
     def test_rotation_dual_threshold(self):
         r=rotation(self.root)
         a.verify_root(r,self.pin,a.FIXTURE_NOW,self.root)

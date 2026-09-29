@@ -5,11 +5,13 @@ mod host_engine;
 fn run(engine:&Engine,module:&Module,export:&str,input:&[u8])->Result<Vec<u8>>{
     let mut store=Store::new(engine,(0usize,0usize));store.set_fuel(20_000_000)?;store.set_epoch_deadline(1);
     let mut linker=Linker::new(engine);
-    linker.func_wrap("arex_v1","diagnostic",|mut caller:Caller<'_,(usize,usize)>,p:i32,n:i32|->Result<i32>{
-        ensure!(p>0 && n>=0,"diagnostic pointer");let memory=caller.get_export("memory").and_then(|e|e.into_memory()).ok_or_else(||anyhow::anyhow!("memory"))?;
+    linker.func_wrap("arex_v1","diagnostic",|mut caller:Caller<'_,(usize,usize)>,p:i32,n:i32|->wasmtime::Result<i32>{
+      let result=(||->Result<i32>{
+        ensure!(p>0 && (0..=256).contains(&n),"diagnostic pointer/size");let memory=caller.get_export("memory").and_then(|e|e.into_memory()).ok_or_else(||anyhow::anyhow!("memory"))?;
         let (count,bytes)=*caller.data();ensure!(count<32 && bytes+n as usize<=8192,"diagnostic budget");
         let start=p as u32 as usize;let end=start.checked_add(n as usize).ok_or_else(||anyhow::anyhow!("overflow"))?;ensure!(end<=memory.data_size(&caller),"diagnostic range");
         std::str::from_utf8(&memory.data(&caller)[start..end])?;*caller.data_mut()=(count+1,bytes+n as usize);Ok(0)
+      })();result.map_err(|e|wasmtime::Error::msg(e.to_string()))
     })?;
     let instance=linker.instantiate(&mut store,module)?;let memory=instance.get_memory(&mut store,"memory").unwrap();
     let alloc=instance.get_typed_func::<i32,i32>(&mut store,"arex_alloc")?;let free=instance.get_typed_func::<(i32,i32),()>(&mut store,"arex_free")?;
@@ -22,9 +24,13 @@ fn run(engine:&Engine,module:&Module,export:&str,input:&[u8])->Result<Vec<u8>>{
 fn main()->Result<()> {
     let args:Vec<_>=env::args().collect();let module=fs::read(&args[1])?;let input=Path::new(&args[2]);let out=Path::new(&args[3]);fs::create_dir_all(out)?;
     let engine=host_engine::build_engine()?;Module::validate(&engine,&module)?;let compiled=Module::new(&engine,&module)?;
+    let mut simd=b"\0asm\x01\0\0\0".to_vec();simd.extend_from_slice(&[1,4,1,0x60,0,0,3,2,1,0,10,23,1,21,0,0xfd,0x0c]);simd.extend_from_slice(&[0;16]);simd.extend_from_slice(&[0x1a,0x0b]);
+    ensure!(Module::validate(&engine,&simd).is_err(),"forbidden SIMD accepted");
+    let mut invalid=b"\0asm\x01\0\0\0".to_vec();invalid.extend_from_slice(&[1,4,1,0x60,0,0,3,2,1,0,10,5,1,3,0,0xff,0x0b]);
+    ensure!(Module::validate(&engine,&invalid).is_err(),"invalid opcode accepted");
     for (name,export) in [("release-plan","plan_requests"),("release-parse","parse_responses"),("overview-plan","plan_navigation"),("overview-parse","parse_navigation"),("episode-plan","plan_navigation"),("episode-parse","parse_navigation")] {
         let bytes=fs::read(input.join(format!("{name}-input.json")))?;
         let first=run(&engine,&compiled,export,&bytes)?;let second=run(&engine,&compiled,export,&bytes)?;ensure!(first==second,"nondeterministic fixture output");fs::write(out.join(format!("{name}-output.json")),first)?;
     }
-    println!("Wasmtime 48.0.3 accepted host feature profile + ABI execution passed");Ok(())
+    println!("Wasmtime 48.0.3 accepted host feature profile + ABI execution + negative SIMD/opcode vectors passed");Ok(())
 }

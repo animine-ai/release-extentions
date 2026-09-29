@@ -21,6 +21,9 @@ class HostCompatibilityTest {
         val item=index.packages.single();val verifier=ExtensionPackageVerifier(StrictWasmModuleProfileVerifier())
         val packageFile=File(directory,"fixture.arex");val pkg=verifier.verify(packageFile,item.binding,trust.publisher(root,item,now),setOf(SourceRole.CALENDAR),setOf("example.org"),1,"wasmtime-48.0.3",now)
         assertEquals("Fixture Provider",pkg.displayName);assertEquals(setOf(NavigationCapability.OVERVIEW_NAVIGATION,NavigationCapability.EPISODE_NAVIGATION),pkg.navigationCapabilities)
+        val badModule=pkg.moduleBytes;val needle="arex_v1".toByteArray();val importAt=(0..badModule.size-needle.size).first{at->needle.indices.all{badModule[at+it]==needle[it]}}
+        "evil_v1".toByteArray().copyInto(badModule,importAt)
+        assertThrows(IllegalArgumentException::class.java){StrictWasmModuleProfileVerifier().verify(badModule,pkg.navigationCapabilities)}
         val storage=Files.createTempDirectory("arex-host-compat").toFile()
         try {
             fun newStore()=ExtensionInstallStore(storage,p,verifier,setOf(SourceRole.CALENDAR),setOf("example.org"),1,"wasmtime-48.0.3",smoke={assertArrayEquals(pkg.moduleBytes,it.moduleBytes)})
@@ -32,6 +35,9 @@ class HostCompatibilityTest {
             assertThrows(IllegalArgumentException::class.java){store.install(packageFile,"fixture.release",now)}
             val tampered=File(storage,"bad.arex");tampered.writeBytes(packageFile.readBytes().also{it[100]=(it[100].toInt() xor 1).toByte()})
             assertThrows(IllegalArgumentException::class.java){verifier.verify(tampered,item.binding,trust.publisher(root,item,now),setOf(SourceRole.CALENDAR),setOf("example.org"),1,"wasmtime-48.0.3",now)}
+            val revocation=ExtensionWireCodec.parseStrictJson(bytes("trust-vectors.json"),262144).jsonArray.first{it.jsonObject.getValue("name").jsonPrimitive.content=="root-revoke-digest"}.jsonObject.getValue("envelope")
+            store.acceptRoot(revocation.toString().toByteArray(),now)
+            assertNull(store.loadUsable(ProviderId.parse("fixture")))
         } finally {storage.deleteRecursively()}
     }
     @Test fun sharedTrustVectorsPassOriginalVerifier() {

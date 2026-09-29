@@ -303,7 +303,7 @@ bounded::text(&self.provider_series_key, 512)?;
 if let Some(v) = &self.provider_url { bounded::text(v, 2048)?; }
 if let Some(v) = &self.source_season { bounded::ensure((0..=9999).contains(v))?; }
 if let Some(v) = &self.navigation_season { bounded::ensure((0..=9999).contains(v))?; }
-&self.installment.validate()?;
+self.installment.validate()?;
 
 Ok(()) } }
 impl Validate for ExtensionContextV1 { fn validate(&self) -> Result<(), bounded::Error> {
@@ -316,7 +316,7 @@ for v in &self.targets { v.validate()?; }
 Ok(()) } }
 impl Validate for PlanInputV1 { fn validate(&self) -> Result<(), bounded::Error> {
 bounded::ensure(*&self.schema_version == 1)?;
-&self.context.validate()?;
+self.context.validate()?;
 Ok(()) } }
 impl Validate for RequestSpec { fn validate(&self) -> Result<(), bounded::Error> {
 bounded::text(&self.request_id, 64)?;
@@ -341,7 +341,7 @@ if let Some(v) = &self.source_hash { bounded::text(v, 64)?; }
 Ok(()) } }
 impl Validate for ParseInputV1 { fn validate(&self) -> Result<(), bounded::Error> {
 bounded::ensure(*&self.schema_version == 1)?;
-&self.context.validate()?;
+self.context.validate()?;
 bounded::ensure(self.responses.len() <= 7)?;
 for v in &self.responses { v.validate()?; }
 Ok(()) } }
@@ -359,7 +359,7 @@ if let Some(v) = &self.provider_series_key { bounded::text(v, 512)?; }
 bounded::text(&self.raw_title, 1024)?;
 if let Some(v) = &self.source_season { bounded::ensure((0..=9999).contains(v))?; }
 if let Some(v) = &self.navigation_season { bounded::ensure((0..=9999).contains(v))?; }
-&self.installment.validate()?;
+self.installment.validate()?;
 
 
 if let Some(v) = &self.source_date_text { bounded::text(v, 256)?; }
@@ -398,7 +398,6 @@ bounded::text(&self.provider_series_key, 512)?;
 if let Some(v) = &self.provider_route_hint { bounded::text(v, 2048)?; }
 if let Some(v) = &self.source_season { bounded::ensure((0..=9999).contains(v))?; }
 if let Some(v) = &self.provider_episode { bounded::text(v, 32)?; }
-if let Some(v) = &self.track {  }
 Ok(()) } }
 impl Validate for NavigationRequestSpecV1 { fn validate(&self) -> Result<(), bounded::Error> {
 bounded::text(&self.request_id, 64)?;
@@ -425,7 +424,6 @@ bounded::id(&self.provider_id)?;
 bounded::text(&self.provider_series_key, 512)?;
 if let Some(v) = &self.source_season { bounded::ensure((0..=9999).contains(v))?; }
 if let Some(v) = &self.provider_episode { bounded::text(v, 32)?; }
-if let Some(v) = &self.track {  }
 bounded::text(&self.url, 2048)?;
 if let Some(v) = &self.request_id { bounded::text(v, 64)?; }
 if let Some(v) = &self.source_hash { bounded::text(v, 64)?; }
@@ -439,7 +437,7 @@ for v in &self.targets { v.validate()?; }
 Ok(()) } }
 impl Validate for NavigationParseInputV1 { fn validate(&self) -> Result<(), bounded::Error> {
 bounded::ensure(*&self.schema_version == 1)?;
-&self.context.validate()?;
+self.context.validate()?;
 bounded::ensure(self.responses.len() <= 7)?;
 for v in &self.responses { v.validate()?; }
 Ok(()) } }
@@ -448,5 +446,5 @@ impl Validate for GuestError { fn validate(&self) -> Result<(), bounded::Error> 
 Ok(()) } }
 impl Validate for ErrorOutputV1 { fn validate(&self) -> Result<(), bounded::Error> {
 bounded::ensure(*&self.schema_version == 1)?;
-&self.error.validate()?;
+self.error.validate()?;
 Ok(()) } }

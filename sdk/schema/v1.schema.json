@@ -1137,7 +1137,8 @@
         "displayName": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 256
+          "maxLength": 64,
+          "x-maxUtf8Bytes": 256
         },
         "version": {
           "type": "string",
@@ -1618,7 +1619,8 @@
         "displayName": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 256
+          "maxLength": 64,
+          "x-maxUtf8Bytes": 256
         },
         "navigationCapabilities": {
           "type": "array",

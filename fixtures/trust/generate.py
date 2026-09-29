@@ -12,6 +12,8 @@ def generate(directory):
     threshold=copy.deepcopy(root);threshold['signatures']=threshold['signatures'][:1]
     duplicate=copy.deepcopy(root);duplicate['signatures']=[duplicate['signatures'][0]]*2
     vectors=[{'name':n,'kind':'root','previous':prev,'valid':valid,'envelope':env} for n,prev,valid,env in [('root-ok',False,True,root),('root-threshold',False,False,threshold),('root-duplicate',False,False,duplicate),('rotation-dual',True,True,rot),('rotation-missing-old',True,False,no_old),('rotation-missing-new',True,False,no_new)]]
+    revoked=copy.deepcopy(rot['signed']);revoked['revokedDigests']=[index['signed']['entries'][0]['archiveSha256']]
+    vectors.append({'name':'root-revoke-digest','kind':'root','previous':True,'valid':True,'envelope':a.envelope(revoked,[a.test_key(i) for i in [0,1,5,6]],'ROOT')})
     for name,mut,valid in [('index-ok',{},True),('index-next',{'sequence':2},True),('index-equivocation',{'issuedAt':'2026-09-29T11:59:00Z'},False),('index-expired',{'expiresAt':'2026-09-28T00:00:00Z'},False),('index-future',{'issuedAt':'2026-09-30T12:00:00Z'},False),('index-too-long',{'expiresAt':'2030-01-01T00:00:00Z'},False)]:
         signed=copy.deepcopy(index['signed']);signed.update(mut);env=a.envelope(signed,[a.test_key(3)],'INDEX')
         vectors.append({'name':name,'kind':'index','previous':True,'valid':valid,'envelope':env})

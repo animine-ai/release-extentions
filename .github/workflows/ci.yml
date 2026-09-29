@@ -34,6 +34,12 @@ jobs:
           rustup toolchain install 1.95.0 --profile minimal
           rustup target add --toolchain 1.95.0 wasm32v1-none
           python3 -m pip install -r requirements.txt
+      - name: Cache pinned native compiler outputs
+        id: native-cache
+        uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: extension/compatibility/native/target
+          key: ep03-native-${{ runner.os }}-${{ hashFiles('extension/compatibility/native/Cargo.lock', 'extension/compatibility/native/Cargo.toml', 'extension/compatibility/host-source-lock.json') }}
       - name: Schemas, archive and trust vectors
         working-directory: extension
         run: |
@@ -60,6 +66,7 @@ jobs:
           python3 fixtures/trust/generate.py build/test-chain
           python3 tools/arex.py verify-chain build/test-chain
       - name: Original production native feature validation and ABI execution
+        # Filled from the immutable host source before compiling the cached harness.
         working-directory: extension
         run: |
           python3 compatibility/export_host.py ../host
@@ -68,6 +75,12 @@ jobs:
       - name: Original Kotlin package, root, index, install and wire verifiers
         working-directory: extension
         run: gradle -p compatibility/host --console=plain test
+      - name: Save pinned native compiler outputs
+        if: always() && steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684
+        with:
+          path: extension/compatibility/native/target
+          key: ep03-native-${{ runner.os }}-${{ hashFiles('extension/compatibility/native/Cargo.lock', 'extension/compatibility/native/Cargo.toml', 'extension/compatibility/host-source-lock.json') }}
       - name: Artifact digest inventory
         if: success()
         working-directory: extension

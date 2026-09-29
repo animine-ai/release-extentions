@@ -89,7 +89,7 @@ def validate(value,name):
             check(type(v) is str,'string required');v.encode('utf-8','strict')
             check(s.get('minLength',0)<=len(v)<=s.get('maxLength',SAFE),'string length')
             # v1 caps are UTF-8 byte caps; JSON Schema maxLength alone is insufficient.
-            check(len(v.encode())<=s.get('maxLength',SAFE),'UTF-8 byte bound')
+            check(len(v.encode())<=s.get('x-maxUtf8Bytes',s.get('maxLength',SAFE)),'UTF-8 byte bound')
             if 'pattern' in s:check(re.fullmatch(s['pattern'],v) is not None,'string pattern')
         elif t=='integer':check(type(v) is int and s.get('minimum',-SAFE)<=v<=s.get('maximum',SAFE),'integer bound')
         elif t=='boolean':check(type(v) is bool,'boolean required')
@@ -153,6 +153,10 @@ def verify_index(env,root,pin,now,last=None):
     check(all(a<b for a,b in zip(order,order[1:])),'catalog order/duplicate release');return env
 def read_archive(data):
     check(0<len(data)<=8388608,'archive bound')
+    check(len(data)>=22 and data[-22:-18]==b'PK\x05\x06','canonical ZIP end record')
+    end=struct.unpack_from('<4s4H2IH',data,len(data)-22)
+    _,disk,central_disk,n_disk,n,size,offset,comment=end
+    check(disk==central_disk==0 and n_disk==n==5 and comment==0 and offset+size==len(data)-22,'central directory/end binding')
     out={}
     with zipfile.ZipFile(io.BytesIO(data)) as z:
         check(not z.comment,'archive comment')
@@ -164,6 +168,22 @@ def read_archive(data):
             check(not e.extra and not e.comment and e.create_system in [0,3],'extra ZIP metadata')
             mode=e.external_attr>>16;check(stat.S_IFMT(mode) in [0,stat.S_IFREG],'symlink/special file')
             out[e.filename]=z.read(e)
+        ordered=sorted(entries,key=lambda e:e.header_offset);check(ordered[0].header_offset==0,'ZIP prefix')
+        for i,e in enumerate(ordered):
+            start=e.header_offset;check(start+30<=offset,'local header bound')
+            h=struct.unpack_from('<4s5H3I2H',data,start)
+            marker,version,flags,method,_,_,crc,compressed,uncompressed,name_len,extra_len=h
+            check(marker==b'PK\x03\x04' and flags==e.flag_bits and method==e.compress_type and flags&~0x808==0,'local header')
+            check(extra_len==0 and data[start+30:start+30+name_len]==e.filename.encode('ascii'),'local name/extra')
+            finish=start+30+name_len+extra_len+e.compress_size
+            boundary=ordered[i+1].header_offset if i+1<len(ordered) else offset
+            if flags&8:
+                descriptor=data[finish:boundary]
+                if len(descriptor)==16:check(descriptor[:4]==b'PK\x07\x08','descriptor signature');descriptor=descriptor[4:]
+                check(len(descriptor)==12,'descriptor bound')
+                check(struct.unpack('<3I',descriptor)==(e.CRC,e.compress_size,e.file_size),'descriptor binding')
+                check(crc in [0,e.CRC] and compressed in [0,e.compress_size] and uncompressed in [0,e.file_size],'local descriptor mirrors')
+            else:check(finish==boundary and (crc,compressed,uncompressed)==(e.CRC,e.compress_size,e.file_size),'local/central boundary mismatch')
     # Host's raw central/local-header reader is exercised in compatibility CI.
     return out
 def verify_package(data,entry,root,now):
@@ -174,7 +194,7 @@ def verify_package(data,entry,root,now):
     check(sha(jcs(m))==entry['manifestSha256'],'manifest catalog digest')
     for n in ['extensionId','providerId','displayName','navigationCapabilities','publisherId','keyId','version','releaseSequence']:
         check(m[n]==entry[n],'manifest catalog identity')
-    check(m['displayName']==m['displayName'].strip() and not any(ord(c)<32 or ord(c)==127 or 0x202a<=ord(c)<=0x202e or 0x2066<=ord(c)<=0x2069 for c in m['displayName']),'unsafe display name')
+    check(1<=len(m['displayName'])<=64 and not any(ord(c)<32 or 0x7f<=ord(c)<=0x9f or 0x202a<=ord(c)<=0x202e or 0x2066<=ord(c)<=0x2069 for c in m['displayName']),'unsafe display name')
     check(m['capabilities'] or m['navigationCapabilities'],'empty capabilities')
     check(not any(h.replace('.','').isdigit() for h in m['allowedHosts']),'IP literal host')
     u=urlsplit(m['sourceRepository']);check(u.scheme=='https' and u.hostname and not u.username and not u.password and not u.query and not u.fragment,'source repository URL')
@@ -264,6 +284,9 @@ def cli():
         entries=[e for e in index['signed']['entries'] if e['archiveSha256']==sha(data)];check(len(entries)==1,'archive not uniquely indexed');verify_package(data,entries[0],root,now);print('Package cryptographic/container verification passed; native profile check is additionally required')
     elif a.cmd=='verify-root':
         env=strict(a.root.read_bytes(),65536);pin=strict(a.pin.read_bytes());previous=strict(a.previous.read_bytes(),65536) if a.previous else None
+        if previous:
+            check(previous['signed']['version']==1,'CLI previous root must be the pinned initial root; longer chains require authenticated persistent state')
+            verify_root(previous,pin,time(a.now))
         verify_root(env,pin,time(a.now),previous);print('Root verified')
     elif a.cmd=='prepare-envelope':
         signed=strict(a.input.read_bytes());validate(signed,a.domain.title()+'Signed');a.output.write_bytes(jcs({'signed':signed,'signatures':[]}))

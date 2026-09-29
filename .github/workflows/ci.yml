@@ -34,6 +34,8 @@ jobs:
           rustup toolchain install 1.95.0 --profile minimal
           rustup target add --toolchain 1.95.0 wasm32v1-none
           python3 -m pip install -r requirements.txt
+          bash tools/install_binaryen.sh "$RUNNER_TEMP/ep03-binaryen"
+          echo "$RUNNER_TEMP/ep03-binaryen/bin" >> "$GITHUB_PATH"
       - name: Cache pinned native compiler outputs
         id: native-cache
         uses: actions/cache/restore@5a3ec84eff668545956fd18022155c47e93e2684

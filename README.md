@@ -68,13 +68,18 @@ Install Python 3.12, Rust 1.95.0 with wasm32v1-none, and the pinned dependencies
 python3 -m pip install -r requirements.txt
 python3 -m unittest discover -s tests -v
 cargo +1.95.0 test --locked --workspace
+bash tools/install_binaryen.sh build/tooling
+export PATH="$PWD/build/tooling/bin:$PATH"
 bash tools/build_fixture.sh build/fixture
 python3 tools/arex.py test-chain --module build/fixture/wasm32v1-none/release/arex_fixture.wasm --output build/test-chain --source-repository https://github.com/YOUR_ACCOUNT/YOUR_REPO --source-commit FULL_SOURCE_COMMIT
 python3 tools/arex.py verify-chain build/test-chain
 ```
 
 CI builds the fixture twice into clean directories and compares WASM and `.arex` bytes.
-It uses Rust wasm32v1-none with statically specialized operation dispatch and no dynamic JSON formatters. It checks out the original accepted host by full SHA, verifies its source checksums,
+It uses Rust wasm32v1-none with statically specialized operation dispatch. Binaryen 133
+(versioned official Linux artifact, SHA-256 verified by tools/install_binaryen.sh)
+removes unused Rust allocation/panic formatters and their initialized function table.
+The optimizer is part of the locked build recipe and both clean outputs are compared. It checks out the original accepted host by full SHA, verifies its source checksums,
 compiles its actual Kotlin package/root/index/installer/codec verifiers and exports its
 exact Wasmtime 48.0.3 feature configuration. That native engine executes every fixture
 operation twice; its real outputs enter the host codecs. CI performs no live AniWorld

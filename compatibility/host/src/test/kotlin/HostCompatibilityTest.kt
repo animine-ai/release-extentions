@@ -21,7 +21,7 @@ class HostCompatibilityTest {
         val item=index.packages.single();val verifier=ExtensionPackageVerifier(StrictWasmModuleProfileVerifier())
         val packageFile=File(directory,"fixture.arex");val pkg=verifier.verify(packageFile,item.binding,trust.publisher(root,item,now),setOf(SourceRole.CALENDAR),setOf("example.org"),1,"wasmtime-48.0.3",now)
         assertEquals("Fixture Provider",pkg.displayName);assertEquals(setOf(NavigationCapability.OVERVIEW_NAVIGATION,NavigationCapability.EPISODE_NAVIGATION),pkg.navigationCapabilities)
-        val badModule=pkg.moduleBytes;val needle="arex_v1".toByteArray();val importAt=(0..badModule.size-needle.size).first{at->needle.indices.all{badModule[at+it]==needle[it]}}
+        val badModule=pkg.moduleBytes.copyOf();val needle="arex_v1".toByteArray();val importAt=(0..badModule.size-needle.size).first{at->needle.indices.all{badModule[at+it]==needle[it]}}
         "evil_v1".toByteArray().copyInto(badModule,importAt)
         assertThrows(IllegalArgumentException::class.java){StrictWasmModuleProfileVerifier().verify(badModule,pkg.navigationCapabilities)}
         val storage=Files.createTempDirectory("arex-host-compat").toFile()

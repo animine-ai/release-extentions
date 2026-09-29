@@ -74,7 +74,7 @@ python3 tools/arex.py verify-chain build/test-chain
 ```
 
 CI builds the fixture twice into clean directories and compares WASM and `.arex` bytes.
-It checks out the original accepted host by full SHA, verifies its source checksums,
+It uses Rust wasm32v1-none with statically specialized operation dispatch and no dynamic JSON formatters. It checks out the original accepted host by full SHA, verifies its source checksums,
 compiles its actual Kotlin package/root/index/installer/codec verifiers and exports its
 exact Wasmtime 48.0.3 feature configuration. That native engine executes every fixture
 operation twice; its real outputs enter the host codecs. CI performs no live AniWorld
@@ -83,7 +83,7 @@ uploaded as `ep03-fixture-evidence`; they are not production release artifacts.
 
 ## SDK and new extensions
 
-`sdk/rust` is no_std + alloc, with serde typed wire DTOs, explicit required nullable
+`sdk/rust` is no_std + alloc, with dependency-free typed wire DTOs, explicit required nullable
 fields, bounded encoding/decoding, owned allocation/free and diagnostic helpers.
 `sources/fixture` demonstrates all four operation exports and a bounded per-instance
 arena. Authors must validate their operation-specific semantics, use fresh instances,

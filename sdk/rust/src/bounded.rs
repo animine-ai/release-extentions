@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
-use serde::{de::DeserializeOwned, Serialize};
 use crate::Validate;
+use crate::wire::{Wire,parse,serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error { InvalidInput, SizeLimit, Json }
 pub fn ensure(ok: bool) -> Result<(), Error> { if ok { Ok(()) } else { Err(Error::InvalidInput) } }
@@ -20,14 +20,14 @@ fn depth(bytes: &[u8]) -> Result<(), Error> {
     }
     ensure(level==0 && !quoted)
 }
-pub fn decode<T: DeserializeOwned + Validate>(bytes: &[u8], cap: usize) -> Result<T, Error> {
+pub fn decode<T: Wire + Validate>(bytes: &[u8], cap: usize) -> Result<T, Error> {
     ensure(!bytes.is_empty() && bytes.len()<=cap)?; depth(bytes)?;
-    let value: T = serde_json::from_slice(bytes).map_err(|_| Error::Json)?;
+    let value=T::from_value(parse(bytes)?)?;
     value.validate()?; Ok(value)
 }
-pub fn encode<T: Serialize + Validate>(value: &T, cap: usize) -> Result<Vec<u8>, Error> {
+pub fn encode<T: Wire + Validate>(value: &T, cap: usize) -> Result<Vec<u8>, Error> {
     value.validate()?;
-    let bytes = serde_json::to_vec(value).map_err(|_| Error::Json)?;
+    let bytes=serialize(&value.to_value());
     ensure(bytes.len()<=cap)?; Ok(bytes)
 }
 #[cfg(test)]

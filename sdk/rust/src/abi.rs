@@ -1,5 +1,4 @@
 use alloc::{boxed::Box, vec, vec::Vec};
-pub type Handler = fn(&[u8]) -> Vec<u8>;
 pub const MAX_INPUT: usize = 4*1024*1024;
 pub const MAX_OUTPUT: usize = 1024*1024;
 pub fn allocate(length: i32) -> i32 {
@@ -13,7 +12,7 @@ pub unsafe fn free(pointer: i32, length: i32) {
     }
 }
 /// Safety: host provides a live, bounded input allocation, distinct from output.
-pub unsafe fn call(pointer: i32,length: i32,handler:Handler) -> i64 {
+pub unsafe fn call<F:FnOnce(&[u8])->Vec<u8>>(pointer: i32,length: i32,handler:F) -> i64 {
     if pointer==0 || length<=0 || length as usize>MAX_INPUT { return 0; }
     #[cfg(target_arch="wasm32")]
     if pointer as u32 as u64 + length as u64 > (core::arch::wasm32::memory_size(0)*65536) as u64 { return 0; }

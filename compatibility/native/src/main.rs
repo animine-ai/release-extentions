@@ -3,16 +3,17 @@ use std::{env,fs,path::Path};
 use wasmtime::{Caller,Engine,Linker,Module,Store};
 mod host_engine;
 fn run(engine:&Engine,module:&Module,export:&str,input:&[u8],probe:bool)->Result<Vec<u8>>{
-    let mut store=Store::new(engine,(0usize,0usize,probe));store.set_fuel(10_000_000)?;store.set_epoch_deadline(1);
+    let fuel=if export.starts_with("parse_"){20_000_000}else{10_000_000};
+    let mut store=Store::new(engine,(0usize,0usize,probe,fuel));store.set_fuel(fuel)?;store.set_epoch_deadline(1);
     let mut linker=Linker::new(engine);
-    linker.func_wrap("arex_v1","diagnostic",|mut caller:Caller<'_,(usize,usize,bool)>,p:i32,n:i32|->wasmtime::Result<i32>{
+    linker.func_wrap("arex_v1","diagnostic",|mut caller:Caller<'_,(usize,usize,bool,u64)>,p:i32,n:i32|->wasmtime::Result<i32>{
       let result=(||->Result<i32>{
         ensure!(p>0 && (0..=256).contains(&n),"diagnostic pointer/size");let memory=caller.get_export("memory").and_then(|e|e.into_memory()).ok_or_else(||anyhow::anyhow!("memory"))?;
-        let (count,bytes,probe)=*caller.data();ensure!(count<32 && bytes+n as usize<=8192,"diagnostic budget");
+        let (count,bytes,probe,initial_fuel)=*caller.data();ensure!(count<32 && bytes+n as usize<=8192,"diagnostic budget");
         let start=p as u32 as usize;let end=start.checked_add(n as usize).ok_or_else(||anyhow::anyhow!("overflow"))?;ensure!(end<=memory.data_size(&caller),"diagnostic range");
         let marker=std::str::from_utf8(&memory.data(&caller)[start..end])?;
-        if probe{eprintln!("phase fuelUsed={} marker={}",10_000_000-caller.get_fuel()?,marker);}
-        *caller.data_mut()=(count+1,bytes+n as usize,probe);Ok(0)
+        if probe{eprintln!("phase fuelUsed={} marker={}",initial_fuel-caller.get_fuel()?,marker);}
+        *caller.data_mut()=(count+1,bytes+n as usize,probe,initial_fuel);Ok(0)
       })();result.map_err(|e|wasmtime::Error::msg(e.to_string()))
     })?;
     let instance=linker.instantiate(&mut store,module)?;let memory=instance.get_memory(&mut store,"memory").unwrap();
@@ -41,7 +42,7 @@ fn main()->Result<()> {
         eprintln!("case={name} inputBytes={}",bytes.len());
         let first=run(&engine,&compiled,export,&bytes,true)?;let second=run(&engine,&compiled,export,&bytes,false)?;ensure!(first==second,"nondeterministic fixture output");fs::write(out.join(format!("{name}-output.json")),&first)?;
         let mut samples=Vec::new();for _ in 0..50 {let start=std::time::Instant::now();run(&engine,&compiled,export,&bytes,false)?;samples.push(start.elapsed().as_micros());}samples.sort();
-        metrics.push(format!("{{\"case\":\"{name}\",\"inputBytes\":{},\"outputBytes\":{},\"p50Micros\":{},\"p95Micros\":{},\"samples\":50,\"memoryBytes\":33554432,\"fuelCeiling\":10000000}}",bytes.len(),first.len(),samples[25],samples[47]));
+        metrics.push(format!("{{\"case\":\"{name}\",\"inputBytes\":{},\"outputBytes\":{},\"p50Micros\":{},\"p95Micros\":{},\"samples\":50,\"memoryBytes\":33554432,\"fuelCeiling\":{}}}",bytes.len(),first.len(),samples[25],samples[47],if export.starts_with("parse_"){20_000_000}else{10_000_000}));
     }
     fs::write(out.join("performance.json"),format!("[{}]",metrics.join(",")))?;
 

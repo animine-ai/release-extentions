@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: animine-ai/Anihyou
-          ref: 0c28a860b0b8ca518683b020053bcefd5f9f8734
+          ref: d8687f07baf0dcbcb0d379fdb50568c7ef1af4d2
           path: host
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:
@@ -115,5 +115,102 @@ jobs:
             extension/build/SHA256SUMS
             extension/compatibility/host/build/reports/tests/
             extension/compatibility/host/build/test-results/
+          if-no-files-found: warn
+          retention-days: 30
+
+  android-proof:
+    needs: verify
+    name: EP04 Android de.aniworld production-runtime proof
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: extension
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: animine-ai/Anihyou
+          ref: d8687f07baf0dcbcb0d379fdb50568c7ef1af4d2
+          path: host
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
+      - name: Install compile SDK
+        run: android sdk install platforms/android-37.0
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+      - name: Build real de.aniworld guest and hermetic inputs
+        working-directory: extension
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup target add --toolchain 1.95.0 wasm32v1-none
+          bash tools/install_binaryen.sh "$RUNNER_TEMP/ep04-binaryen"
+          export PATH="$RUNNER_TEMP/ep04-binaryen/bin:$PATH"
+          bash tools/build_aniworld.sh build/aniworld-android
+          python3 tools/aniworld_vectors.py build/aniworld-inputs
+      - name: Build production Android runtime proof APK
+        run: |
+          cd host
+          bash tools/ep02-android/build-native.sh
+          mkdir -p tools/ep02-android/host-app/src/main/jniLibs/x86_64 tools/ep02-android/host-app/src/main/jniLibs/arm64-v8a
+          cp tools/ep02-android/native-out/x86_64/libarex_runtime.so tools/ep02-android/host-app/src/main/jniLibs/x86_64/
+          cp tools/ep02-android/native-out/arm64-v8a/libarex_runtime.so tools/ep02-android/host-app/src/main/jniLibs/arm64-v8a/
+          bash tools/ep02-android/generate-test-https-material.sh
+          bash tools/ep02-android/build-fixture.sh
+          mkdir -p tools/ep02-android/host-app/src/main/assets
+          cp ../extension/build/aniworld-android/wasm32v1-none/release/arex_aniworld.wasm tools/ep02-android/host-app/src/main/assets/aniworld.wasm
+          cp ../extension/sources/aniworld/fixtures/recent.html tools/ep02-android/host-app/src/main/assets/aniworld-recent.html
+          cp ../extension/sources/aniworld/fixtures/episode.html tools/ep02-android/host-app/src/main/assets/aniworld-episode.html
+          printf '%s\n' "$GITHUB_SHA" > tools/ep02-android/host-app/src/main/assets/aniworld-source-commit.txt
+          ./gradlew --console=plain --stacktrace :tools:ep02-runtime-app:assembleDebug
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Start hermetic DNS route
+        run: |
+          sudo ip address add 8.8.8.8/32 dev lo
+          sudo python3 -u host/tools/ep02-android/test-dns-server.py "$RUNNER_TEMP/ep04-dns-ready" > "$RUNNER_TEMP/ep04-dns.log" 2>&1 &
+          for attempt in {1..10}; do
+            if [[ -f "$RUNNER_TEMP/ep04-dns-ready" ]]; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/ep04-dns.log"
+          exit 1
+      - name: Execute Kotlin App to ExtensionRuntime to Wasmtime to de.aniworld
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          profile: pixel_2
+          emulator-boot-timeout: 900
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot-save -camera-back none -dns-server 127.0.0.1
+          script: cd host && bash tools/ep02-android/run-device.sh debug 35
+      - name: Stop hermetic DNS route
+        if: always()
+        run: |
+          if [[ -s "$RUNNER_TEMP/ep04-dns-ready" ]]; then
+            sudo kill "$(cat "$RUNNER_TEMP/ep04-dns-ready")" 2>/dev/null || true
+          fi
+          sudo ip address del 8.8.8.8/32 dev lo 2>/dev/null || true
+      - name: Collect EP04 Android proof
+        if: always()
+        run: |
+          mkdir -p host/tools/ep02-android/results/ep04-android
+          timeout 15 adb logcat -d > host/tools/ep02-android/results/ep04-android/logcat.txt 2>&1 || true
+          sha256sum extension/build/aniworld-android/wasm32v1-none/release/arex_aniworld.wasm > host/tools/ep02-android/results/ep04-android/aniworld-wasm.sha256
+      - name: Upload EP04 Android evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ep04-android-aniworld-proof
+          path: |
+            host/tools/ep02-android/host-app/build/outputs/apk/debug/
+            host/tools/ep02-android/results/ep04-android/
+            extension/build/aniworld-inputs/
           if-no-files-found: warn
           retention-days: 30

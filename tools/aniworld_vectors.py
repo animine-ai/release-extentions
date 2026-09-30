@@ -47,12 +47,19 @@ responses=[response(r,(FIX/({'CALENDAR':'calendar','RECENT':'recent','POSTPONEME
 put('release-parse',{'schemaVersion':1,'context':context,'responses':responses},count=7,outcomes=['SUCCESS']*4)
 for prefix,role,count in [('calendar','CALENDAR',2),('recent','RECENT',2),('postponement','POSTPONEMENT',2),('direct','DIRECT',1)]:
     release_case(prefix,role,(FIX/(prefix if prefix!='direct' else 'episode')).with_suffix('.html').read_text(),count,'SUCCESS')
-for fixture,count,outcome in [('bot',0,'FAILURE'),('truncated',0,'FAILURE'),('malformed-date',0,'PARTIAL'),('duplicate-row',2,'SUCCESS'),('unknown-track',1,'SUCCESS')]:
-    release_case(fixture,'RECENT',(FIX/(fixture+'.html')).read_text(),count,outcome,fixture=='unknown-track')
+for fixture,count,outcome in [('bot',0,'FAILURE'),('truncated',0,'FAILURE'),('malformed-date',0,'PARTIAL'),('duplicate-row',2,'SUCCESS'),('unknown-track',0,'PARTIAL')]:
+    release_case(fixture,'RECENT',(FIX/(fixture+'.html')).read_text(),count,outcome)
+foreign=(FIX/'recent.html').read_text().replace('Episode 1 mit deutschen Untertiteln','Episode 1 auf Englisch').replace('Deutsche Untertitel Flagge, German Subtitle Flag','Englische Flagge, English Flag')
+release_case('known-foreign-track','RECENT',foreign,1,'SUCCESS')
 release_case('empty','RECENT','',0,'FAILURE')
 # A page that advertises a stream but lacks hosterSiteTitle coordinates has no
 # structural identity proof, so direct-release parsing must fail closed.
 release_case('missing-direct','DIRECT',(FIX/'missing-episode.html').read_text(),0,'FAILURE')
+split_context=copy.deepcopy(context);split_context['sourceRoles']=['DIRECT'];split_context['targets'][0]['sourceSeason']=1;split_context['targets'][0]['navigationSeason']=2;split_context['targets'][0]['installment']['number']='15'
+split_body=(FIX/'episode.html').read_text().replace('staffel-1/episode-1','staffel-2/episode-15').replace('data-season="1"','data-season="2"').replace('data-episode="1"','data-episode="15"')
+split_url=ORIGIN+'/anime/stream/fixture-series/staffel-2/episode-15'
+split_response={'requestId':'direct-0','sourceRole':'DIRECT','status':'OK','httpStatus':200,'finalUrl':split_url,'bodyUtf8':split_body,'sourceHash':hashlib.sha256(split_body.encode()).hexdigest()}
+put('split-direct-release-parse',{'schemaVersion':1,'context':split_context,'responses':[split_response]},count=1,outcomes=['SUCCESS'])
 bad=response('RECENT',(FIX/'recent.html').read_text());bad['finalUrl']=urls['CALENDAR']
 c=copy.deepcopy(context);c['sourceRoles']=['RECENT'];put('redirect-release-parse',{'schemaVersion':1,'context':c,'responses':[bad]},count=0,outcomes=['FAILURE'])
 calendar_large=padded_page((FIX/'calendar.html').read_text(),326112,1516)

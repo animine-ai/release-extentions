@@ -3,9 +3,11 @@ use arex_sdk::*;
 use bounded::{decode,encode};
 use crate::{error,identity,page,route,html::Document,Result};
 fn diagnostic(code:&str)->ObservationDiagnosticV1{ObservationDiagnosticV1{code:code.into(),message:code.into()}}
-fn notice_track(line:&str)->Result<Option<ObservationTrack>>{
-    let low=line.to_ascii_lowercase();let sub=low.contains("(sub)");let dub=low.contains("(dub)");
-    if sub&&dub{return Err(());}Ok(if sub{Some(ObservationTrack::DE_SUB)}else if dub{Some(ObservationTrack::DE_DUB)}else{None})
+fn notice_tracks(line:&str)->Result<Vec<ObservationTrack>>{
+    let low=line.to_ascii_lowercase();let combined=low.contains("(sub+dub)")||low.contains("(dub+sub)");
+    let sub=low.contains("(sub)");let dub=low.contains("(dub)");
+    if (sub&&dub)||(combined&&(sub||dub)){return Err(());}
+    Ok(if combined{vec![ObservationTrack::DE_SUB,ObservationTrack::DE_DUB]}else if sub{vec![ObservationTrack::DE_SUB]}else if dub{vec![ObservationTrack::DE_DUB]}else{vec![]})
 }
 fn context(c:&ExtensionContextV1)->bool{
     identity(&c.extension_id,&c.provider_id)&&!c.source_roles.is_empty()&&
@@ -14,8 +16,8 @@ fn context(c:&ExtensionContextV1)->bool{
 }
 fn target_url(t:&ExtensionTargetV1)->Option<String>{
     if t.installment.kind!=ObservationInstallmentKind::EPISODE||t.track==ObservationTrack::UNKNOWN{return None;}
-    let season=t.source_season?;if t.navigation_season.is_some_and(|s|s!=season){return None;}
-    let number=t.installment.number.as_deref()?;let constructed=route::exact(&t.provider_series_key,season,number)?;
+    let _source_season=t.source_season?;let navigation_season=t.navigation_season?;
+    let number=t.installment.number.as_deref()?;let constructed=route::exact(&t.provider_series_key,navigation_season,number)?;
     if let Some(hint)=&t.provider_url{if route::url(hint)?!=constructed{return None;}}
     Some(constructed)
 }
@@ -36,8 +38,8 @@ pub fn plan(bytes:&[u8])->Vec<u8>{
     let Ok(i)=decode::<PlanInputV1>(bytes,256*1024)else{return error();};let Ok(requests)=release_plan(&i.context)else{return error();};
     let _=abi::diagnostic_text("de.aniworld release plan");encode(&PlanOutputV1{schema_version:1,requests},65536).unwrap_or_else(|_|error())
 }
-fn observation(c:&ExtensionContextV1,r:&ResponseEnvelope,key:Option<String>,title:String,season:Option<i32>,number:Option<String>,track:ObservationTrack)->ProviderObservationV1{
-    ProviderObservationV1{schema_version:1,extension_id:c.extension_id.clone(),provider_id:c.provider_id.clone(),request_id:r.request_id.clone(),source_role:r.source_role.clone(),provider_series_key:key,raw_title:title,source_season:season,navigation_season:season,installment:InstallmentV1{kind:if number.is_some(){ObservationInstallmentKind::EPISODE}else{ObservationInstallmentKind::UNKNOWN},number},track,
+fn observation(c:&ExtensionContextV1,r:&ResponseEnvelope,key:Option<String>,title:String,source_season:Option<i32>,navigation_season:Option<i32>,number:Option<String>,track:ObservationTrack)->ProviderObservationV1{
+    ProviderObservationV1{schema_version:1,extension_id:c.extension_id.clone(),provider_id:c.provider_id.clone(),request_id:r.request_id.clone(),source_role:r.source_role.clone(),provider_series_key:key,raw_title:title,source_season,navigation_season,installment:InstallmentV1{kind:if number.is_some(){ObservationInstallmentKind::EPISODE}else{ObservationInstallmentKind::UNKNOWN},number},track,
         claim_kind:match r.source_role{SourceRole::CALENDAR=>ObservationClaimKind::FORECAST,SourceRole::RECENT=>ObservationClaimKind::RELEASE_LISTING,SourceRole::POSTPONEMENT=>ObservationClaimKind::CORRECTION,SourceRole::DIRECT=>ObservationClaimKind::DIRECT_AVAILABILITY},source_date_text:None,source_time_text:None,source_raw_text:None,parsed_timestamp:None,approximate:false,schedule_marker:ObservationScheduleMarker::NONE,correction_marker:None,source_url:r.final_url.clone().unwrap_or_default(),source_hash:r.source_hash.clone().unwrap_or_default(),diagnostics:vec![]}
 }
 fn heading(d:&Document,text:&str)->Result<()>{let h=d.unique(1..d.nodes.len(),|n|n.tag=="h1")?;if d.text(h,256)?!=text{return Err(());}Ok(())}
@@ -59,7 +61,7 @@ fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<P
         if !href.contains("/anime/stream/"){continue;}if calendar&&d.nearest_class(a,"calendarList").is_none(){continue;}
         rows+=1;if rows>512{return Err(());}
         let parsed=(||->Result<Vec<ProviderObservationV1>>{
-            let route=route::parse(href).ok_or(())?;let season=route.season.ok_or(())?;let number=route.episode.ok_or(())?;
+            let route=route::parse(href).ok_or(())?;let navigation_season=route.season.ok_or(())?;let number=route.episode.ok_or(())?;
             let row=if calendar{a}else{d.nearest_class(d.nodes[a].parent,"col-md-12").ok_or(())?};
             if !calendar&&d.descendants(row).filter(|i|d.nodes[*i].tag=="a").count()!=1{return Err(());}
             let title_node=d.unique(d.descendants(a),|n|if calendar{n.tag=="h3"&&n.class("seriesTitle")}else{n.tag=="strong"})?;
@@ -68,7 +70,7 @@ fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<P
                 let small=d.descendants(a).find(|i|d.nodes[*i].tag=="small").ok_or(())?;
                 let label=d.raw_text(small,256)?;route::label(label.split_whitespace().next().ok_or(())?).ok_or(())?
             }else{let coord=d.unique(d.descendants(a),|n|n.tag=="span"&&n.class("blue2"))?;route::label(&d.text(coord,64)?).ok_or(())?};
-            if coordinates!=(season,number.clone()){return Err(());}
+            let(source_season,source_episode)=coordinates;if source_episode!=number{return Err(());}
             let(date,time,approximate)=if calendar{
                 let section=d.nearest_class(a,"calendarList").ok_or(())?;
                 let h=d.unique(d.descendants(section),|n|n.tag=="h3"&&!n.class("seriesTitle"))?;let date=route::date(&d.text(h,128)?).ok_or(())?;
@@ -76,7 +78,7 @@ fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<P
                 (date,Some(route::time(&text).ok_or(())?),text.contains('~'))
             }else{let n=d.unique(d.descendants(a),|n|n.class("elementFloatRight"))?;(route::date(&d.text(n,128)?).ok_or(())?,None,false)};
             let mut facts=vec![];for track in page::tracks(d,row)?{
-                let mut o=observation(c,r,Some(route.key.clone()),title.clone(),Some(season),Some(number.clone()),track);
+                let mut o=observation(c,r,Some(route.key.clone()),title.clone(),Some(source_season),Some(navigation_season),Some(number.clone()),track);
                 o.source_date_text=Some(date.clone());o.source_time_text=time.clone();o.approximate=approximate;
                 if o.track==ObservationTrack::UNKNOWN{o.diagnostics.push(diagnostic("UNKNOWN_LANGUAGE_TRACK"));}facts.push(o);
             }Ok(facts)
@@ -87,9 +89,9 @@ fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<P
 }
 fn direct(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document,p:&RequestSpec)->Result<Vec<ProviderObservationV1>>{
     let t=c.targets.iter().find(|t|p.target_token.as_ref()==Some(&t.target_token)).ok_or(())?;
-    let season=t.source_season.ok_or(())?;let number=t.installment.number.as_deref().ok_or(())?;
-    let(title,available)=page::episode(d,&p.url,season,number)?;if !available.contains(&t.track){return Ok(vec![]);}
-    Ok(vec![observation(c,r,Some(t.provider_series_key.clone()),title,Some(season),Some(number.into()),t.track.clone())])
+    let source_season=t.source_season.ok_or(())?;let navigation_season=t.navigation_season.ok_or(())?;let number=t.installment.number.as_deref().ok_or(())?;
+    let(title,available)=page::episode(d,&p.url,navigation_season,number)?;if !available.contains(&t.track){return Ok(vec![]);}
+    Ok(vec![observation(c,r,Some(t.provider_series_key.clone()),title,Some(source_season),Some(navigation_season),Some(number.into()),t.track.clone())])
 }
 fn postponed(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<ProviderObservationV1>,bool)>{
     let article=d.unique(1..d.nodes.len(),|n|n.class("supportFAQArticle")&&n.class("supportFAQHighlight"))?;

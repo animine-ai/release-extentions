@@ -1,4 +1,4 @@
-name: EP03 fixture and original-host compatibility
+name: EP04 de.aniworld v1 compatibility and proof
 on:
   push:
   pull_request:
@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: animine-ai/Anihyou
-          ref: 71b32648931fd3a852528cfabf3128074c3227f3
+          ref: 0c28a860b0b8ca518683b020053bcefd5f9f8734
           path: host
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:
@@ -104,7 +104,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: ep03-fixture-evidence
+          name: ep04-aniworld-evidence
           path: |
             extension/build/aniworld-inputs/
             extension/build/aniworld-wire/

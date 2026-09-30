@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: animine-ai/Anihyou
-          ref: c343b4bca3a7133330287e09de861729faf67273
+          ref: 71b32648931fd3a852528cfabf3128074c3227f3
           path: host
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:
@@ -84,6 +84,8 @@ jobs:
           python3 compatibility/export_host.py ../host
           cargo +1.95.0 run --locked --release --manifest-path compatibility/native/Cargo.toml -- build/clean-a/wasm32v1-none/release/arex_fixture.wasm fixtures/wire build/wire
           python3 tools/check_wire.py
+          python3 tools/aniworld_vectors.py
+          cargo +1.95.0 run --locked --release --manifest-path compatibility/native/Cargo.toml -- build/aniworld-a/wasm32v1-none/release/arex_aniworld.wasm build/aniworld-inputs build/aniworld-wire
       - name: Original Kotlin package, root, index, install and wire verifiers
         working-directory: extension
         run: gradle -p compatibility/host --console=plain test
@@ -104,6 +106,8 @@ jobs:
         with:
           name: ep03-fixture-evidence
           path: |
+            extension/build/aniworld-inputs/
+            extension/build/aniworld-wire/
             extension/build/aniworld-chain/
             extension/build/test-chain/
             extension/build/wire/

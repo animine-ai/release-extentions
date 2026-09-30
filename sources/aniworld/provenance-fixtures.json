@@ -141,12 +141,16 @@
     {
       "file": "fixtures/duplicate-row.html",
       "sourceCapture": "recent",
-      "sha256": "6d12ff776efa0c084c5ba51b1bbd33e349760026eb73b968b3431fb8e0f292eb",
-      "bytes": 1618,
+      "sha256": "4ac2c14bbc705ab1f10646a3ad5e774d8e5a0f0f0f34371679b305ec98f00988",
+      "bytes": 1641,
       "fixtureKind": "synthetic_negative_test_input",
       "scenario": "duplicate_row",
       "syntheticDerivedFrom": "fixtures/recent.html",
-      "mutation": "Repeated one otherwise identical synthetic DE_SUB listing row."
+      "mutation": "Repeated one otherwise identical synthetic DE_SUB listing row.",
+      "scenarios": [
+        "Duplicate DE_SUB row",
+        "Duplicate DE_DUB row"
+      ]
     },
     {
       "file": "fixtures/malformed-date.html",

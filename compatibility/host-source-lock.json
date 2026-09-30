@@ -1,8 +1,8 @@
 {
   "repository": "animine-ai/Anihyou",
-  "commit": "c343b4bca3a7133330287e09de861729faf67273",
+  "commit": "71b32648931fd3a852528cfabf3128074c3227f3",
   "files": {
-    ".github/workflows/ep02-runtime-android-proof.yml": "9fae6fbacc2718ba73f1e867d92caddae62bb7a9b8a0d9313bb199832453c804",
+    ".github/workflows/ep02-runtime-android-proof.yml": "77e5becfde480ffeb55dc577224e4e88ea92369cd871b2c4b13f06755ac830f2",
     "tools/ep02-android/build-fixture.sh": "330df83030c789d6e1a9357387201ffee39dfa556f4a619516117367fee10d2f",
     "tools/ep02-android/normalize-fixture-wasm.py": "49d7b0c0d24fc8fed5adc7a73341a6347a9f636751e586c8d65e11cce8cb7a10",
     "tools/ep02-android/fixture/Cargo.toml": "e7cb7e316ba89b3484774c29aa8ec7ae4ea2f6454082a9e762a8cfa86797695f",
@@ -17,14 +17,14 @@
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/StrictWasmModuleProfileVerifier.kt": "cfaa08aa1f850f1d3e3e00902f045eb7d5c63a35595f1e217e04ad3daef491fd",
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionTrust.kt": "97288436cf34801598930dac788d6fd08a8cdd00a294d19f2405657788969da9",
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionPackageVerifier.kt": "be6025a137f0e4a4e1c47687bc7f21fbac2fa0ffc9e0283ab88c4d133e8e4abe",
-    "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionInstallStore.kt": "9af03f5696df4cb7da6c701b092af9ec948f78515e691837ca193a43172f29dc",
+    "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionInstallStore.kt": "2f45826ed14b609a3957e973f195b3ea0815992520f0196a91f5837fa065a4e3",
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/NavigationWireCodecV1.kt": "52218b67dfe96d335a3b7b9421fe29e4bf8c9227550359bb1b78043ec94af366",
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionHostCoordinator.kt": "524e60c4c37f903815e6ca614591aa9142d44799a950775ea9d48c262307c197",
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionWireCodec.kt": "679866da474e7dfa40758316616e976404823834b93f6204651eda6b03de3c29",
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ArexZipArchiveReader.kt": "71b055ed38b6c4152e89385e8ffb5bbc01eb41281796c48ba9736edb7852bd88"
   },
   "gitBlobSha": {
-    ".github/workflows/ep02-runtime-android-proof.yml": "9d5a12d5f88dd339c0ebd6842dc9061f16fc2c0e",
+    ".github/workflows/ep02-runtime-android-proof.yml": "0b86472ee0cf3022675eff8248ace8f50645b772",
     "tools/ep02-android/build-fixture.sh": "9bdb5348f773749e15b2ba3702a3d4d4cafc8a7d",
     "tools/ep02-android/normalize-fixture-wasm.py": "bffcf469d82313329251477b1a3202b31503a0d0",
     "tools/ep02-android/fixture/Cargo.toml": "b9754f54df23348a6fbd59a6a79a361f984ae233",
@@ -39,7 +39,7 @@
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/StrictWasmModuleProfileVerifier.kt": "f12754cd9f216432611346e60aa07a4f56941600",
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionTrust.kt": "84a479e9e0f8ab730747f2e7afddf926e0ab98dc",
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionPackageVerifier.kt": "fcf037524125ec8c4a896e669fb3552f24c96ae9",
-    "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionInstallStore.kt": "2e2fa564748167e79f6ae147acdddaba15895726",
+    "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionInstallStore.kt": "8bc2c33d743f75428637c5068d97fc6c4167ce54",
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/NavigationWireCodecV1.kt": "b9d79d56ff791b3a0850266562c2964b0888f3d8",
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionHostCoordinator.kt": "5f8a46c3d66cb5de5f8154f87441b8aa85f93d39",
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionWireCodec.kt": "b359bd9b0af532d7f03ca03564f75699be588a65",

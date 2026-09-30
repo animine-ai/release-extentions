@@ -3,7 +3,7 @@ use std::{env,fs,path::Path};
 use wasmtime::{Caller,Engine,Linker,Module,Store};
 mod host_engine;
 fn run(engine:&Engine,module:&Module,export:&str,input:&[u8])->Result<Vec<u8>>{
-    let mut store=Store::new(engine,(0usize,0usize));store.set_fuel(20_000_000)?;store.set_epoch_deadline(1);
+    let mut store=Store::new(engine,(0usize,0usize));store.set_fuel(10_000_000)?;store.set_epoch_deadline(1);
     let mut linker=Linker::new(engine);
     linker.func_wrap("arex_v1","diagnostic",|mut caller:Caller<'_,(usize,usize)>,p:i32,n:i32|->wasmtime::Result<i32>{
       let result=(||->Result<i32>{
@@ -28,9 +28,17 @@ fn main()->Result<()> {
     ensure!(Module::validate(&engine,&simd).is_err(),"forbidden SIMD accepted");
     let mut invalid=b"\0asm\x01\0\0\0".to_vec();invalid.extend_from_slice(&[1,4,1,0x60,0,0,3,2,1,0,10,5,1,3,0,0xff,0x0b]);
     ensure!(Module::validate(&engine,&invalid).is_err(),"invalid opcode accepted");
-    for (name,export) in [("release-plan","plan_requests"),("release-parse","parse_responses"),("overview-plan","plan_navigation"),("overview-parse","parse_navigation"),("episode-plan","plan_navigation"),("episode-parse","parse_navigation")] {
-        let bytes=fs::read(input.join(format!("{name}-input.json")))?;
-        let first=run(&engine,&compiled,export,&bytes)?;let second=run(&engine,&compiled,export,&bytes)?;ensure!(first==second,"nondeterministic fixture output");fs::write(out.join(format!("{name}-output.json")),first)?;
+    let mut inputs:Vec<_>=fs::read_dir(input)?.filter_map(|e|e.ok()).map(|e|e.path()).filter(|p|p.file_name().is_some_and(|n|n.to_string_lossy().ends_with("-input.json"))).collect();inputs.sort();
+    let mut metrics=Vec::new();
+    for path in inputs {
+        let file=path.file_name().unwrap().to_string_lossy();let name=file.strip_suffix("-input.json").unwrap();
+        let export=if name.contains("release-plan"){"plan_requests"}else if name.contains("release-parse"){"parse_responses"}else if name.ends_with("-plan"){"plan_navigation"}else{"parse_navigation"};
+        let bytes=fs::read(&path)?;
+        let first=run(&engine,&compiled,export,&bytes)?;let second=run(&engine,&compiled,export,&bytes)?;ensure!(first==second,"nondeterministic fixture output");fs::write(out.join(format!("{name}-output.json")),&first)?;
+        let mut samples=Vec::new();for _ in 0..50 {let start=std::time::Instant::now();run(&engine,&compiled,export,&bytes)?;samples.push(start.elapsed().as_micros());}samples.sort();
+        metrics.push(format!("{{\"case\":\"{name}\",\"inputBytes\":{},\"outputBytes\":{},\"p50Micros\":{},\"p95Micros\":{},\"samples\":50,\"memoryBytes\":33554432,\"fuelCeiling\":10000000}}",bytes.len(),first.len(),samples[25],samples[47]));
     }
+    fs::write(out.join("performance.json"),format!("[{}]",metrics.join(",")))?;
+
     println!("Wasmtime 48.0.3 accepted host feature profile + ABI execution + negative SIMD/opcode vectors passed");Ok(())
 }

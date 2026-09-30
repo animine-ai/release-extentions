@@ -1,18 +1,18 @@
 //! Bounded, non-executing HTML reader. This is not a browser or a forgiving HTML5
 //! repair engine: ambiguous nesting/attributes and exhausted budgets fail closed.
-use alloc::{string::{String, ToString}, vec, vec::Vec};
+use alloc::{borrow::Cow,string::String, vec, vec::Vec};
 
 pub const MAX_NODES: usize = 16384;
 pub struct Node<'a> {
-    pub tag: String,
-    pub attrs: Vec<(String, String)>,
+    pub tag: Cow<'a,str>,
+    pub attrs: Vec<(Cow<'a,str>, Cow<'a,str>)>,
     pub text: &'a str,
     pub parent: usize,
     pub end: usize,
 }
 impl Node<'_> {
     pub fn attr(&self, name: &str) -> Option<&str> {
-        self.attrs.iter().find(|(k, _)| k == name).map(|(_, v)| v.as_str())
+        self.attrs.iter().find(|(k, _)| k == name).map(|(_, v)| v.as_ref())
     }
     pub fn class(&self, name: &str) -> bool {
         self.attr("class").is_some_and(|v| v.split_ascii_whitespace().any(|c| c == name))
@@ -22,6 +22,7 @@ pub struct Document<'a> { pub nodes: Vec<Node<'a>> }
 type Result<T> = core::result::Result<T, ()>;
 fn name_byte(b: u8) -> bool { b.is_ascii_alphanumeric() || b"-_:".contains(&b) }
 fn space(b: u8) -> bool { b.is_ascii_whitespace() }
+fn lower(value:&str)->Cow<'_,str>{if value.bytes().any(|b|b.is_ascii_uppercase()){Cow::Owned(value.to_ascii_lowercase())}else{Cow::Borrowed(value)}}
 fn void(tag: &str) -> bool {
     matches!(tag, "area"|"base"|"br"|"col"|"embed"|"hr"|"img"|"input"|"link"|"meta"|"param"|"source"|"track"|"wbr")
 }
@@ -59,7 +60,7 @@ impl<'a> Document<'a> {
         while i < bytes.len() {
             if nodes.len() >= MAX_NODES { return Err(()); }
             if bytes[i] != b'<' {
-                let start = i; while i < bytes.len() && bytes[i] != b'<' { i += 1; }
+                let start = i; i+=input.get(i..).ok_or(())?.find('<').unwrap_or(bytes.len()-i);
                 let text = input.get(start..i).ok_or(())?;
                 if !text.trim().is_empty() { let n=nodes.len(); nodes.push(Node { tag: "#text".into(), attrs: vec![], text, parent: *stack.last().ok_or(())?, end: n+1 }); }
                 continue;
@@ -73,8 +74,8 @@ impl<'a> Document<'a> {
             i += 1; let closing = bytes.get(i)==Some(&b'/'); if closing { i += 1; }
             let start=i; while i<bytes.len() && name_byte(bytes[i]) { i+=1; }
             if start==i { return Err(()); }
-            let tag=input.get(start..i).ok_or(())?.to_ascii_lowercase();
-            let mut attrs: Vec<(String,String)>=vec![]; let mut self_closed=false;
+            let tag=lower(input.get(start..i).ok_or(())?);
+            let mut attrs: Vec<(Cow<'a,str>,Cow<'a,str>)>=vec![]; let mut self_closed=false;
             loop {
                 while i<bytes.len() && space(bytes[i]) { i+=1; }
                 if bytes.get(i)==Some(&b'>') { i+=1; break; }
@@ -82,19 +83,20 @@ impl<'a> Document<'a> {
                 if closing || attrs.len()>=32 { return Err(()); }
                 let a=i; while i<bytes.len() && name_byte(bytes[i]) { i+=1; }
                 if a==i { return Err(()); }
-                let key=input.get(a..i).ok_or(())?.to_ascii_lowercase();
+                let key=lower(input.get(a..i).ok_or(())?);
                 if attrs.iter().any(|(k,_)|k==&key) { return Err(()); }
                 while i<bytes.len() && space(bytes[i]) { i+=1; }
-                let mut value=String::new();
+                let mut value=Cow::Borrowed("");
                 if bytes.get(i)==Some(&b'=') {
                     i+=1; while i<bytes.len() && space(bytes[i]) { i+=1; }
                     let quoted=bytes.get(i).copied().filter(|b|*b==b'\'' || *b==b'"');
                     if quoted.is_some() { i+=1; }
                     let v=i;
-                    if let Some(q)=quoted { while i<bytes.len() && bytes[i]!=q { i+=1; } if i==bytes.len() { return Err(()); } }
+                    if let Some(q)=quoted { i+=input.get(i..).ok_or(())?.find(q as char).ok_or(())?; }
                     else { while i<bytes.len() && !space(bytes[i]) && bytes[i]!=b'>' { i+=1; } }
                     if i-v>8192 { return Err(()); }
-                    value=entities(input.get(v..i).ok_or(())?)?; if quoted.is_some() { i+=1; }
+                    let raw=input.get(v..i).ok_or(())?;
+                    value=if raw.contains('&'){Cow::Owned(entities(raw)?)}else{Cow::Borrowed(raw)}; if quoted.is_some() { i+=1; }
                 }
                 attrs.push((key,value));
             }
@@ -114,11 +116,14 @@ impl<'a> Document<'a> {
                 nodes[current].end=nodes.len(); stack.pop(); continue;
             }
             // Raw content cannot influence selectors or observations.
-            if matches!(tag.as_str(),"script"|"style"|"noscript") && !self_closed {
+            if matches!(tag.as_ref(),"script"|"style"|"noscript") && !self_closed {
                 let mut end=i;
                 while end<bytes.len() {
-                    if bytes[end]==b'<' && bytes.get(end+1)==Some(&b'/') &&
-                        input.get(end+2..end+2+tag.len()).is_some_and(|s|s.eq_ignore_ascii_case(&tag)) { break; }
+                    end+=input.get(end..).ok_or(())?.find('<').unwrap_or(bytes.len()-end);
+                    if end==bytes.len(){break;}
+                    if bytes.get(end+1)==Some(&b'/') &&
+                        input.get(end+2..end+2+tag.len()).is_some_and(|s|s.eq_ignore_ascii_case(&tag)) &&
+                        bytes.get(end+2+tag.len()).is_some_and(|b|*b==b'>'||space(*b)){ break; }
                     end+=1;
                 }
                 if end==bytes.len() { return Err(()); }
@@ -164,5 +169,9 @@ impl<'a> Document<'a> {
     #[test] fn observed_outer_wrapper_omission_is_narrow(){
         assert!(Document::parse("<html><body><div id='wrapper'><h1>A</h1></body></html>").is_ok());
         for s in ["<html><body><div id='other'><h1>A</h1></body></html>","<html><body><div id='wrapper'><div></body></html>","<html><body><div id='wrapper'><h1>A</h1>"]{assert!(Document::parse(s).is_err());}
+    }
+    #[test] fn mixed_case_entities_and_raw_close_boundaries(){
+        let d=Document::parse("<MAIN CLASS='safe&amp;bound'><SCRIPT></scriptX><h1>fake</h1></SCRIPT><H1>Real</H1></MAIN>").unwrap();
+        assert_eq!(d.nodes[1].attr("class"),Some("safe&bound"));assert_eq!(d.text(1,128).unwrap(),"Real");
     }
 }

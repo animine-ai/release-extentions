@@ -103,18 +103,21 @@ fn postponed(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec
         for(i,line)in lines.iter().enumerate(){
             if !line.starts_with('•'){continue;}let coordinate=line.trim_start_matches('•').trim();let mut words=coordinate.split_whitespace();
             let s=words.next().unwrap_or("");let e=words.next().unwrap_or("");let Some((season,number))=route::label(&route::join(&[s,e]))else{partial=true;continue;};
-            let Ok(line_track)=notice_track(line)else{partial=true;continue;};
+            let Ok(line_tracks)=notice_tracks(line)else{partial=true;continue;};
             let mut seen=false;
             for date_line in lines.iter().skip(i+1).take_while(|s|!s.starts_with('•')){
                 let down=date_line.contains('▼');let up=date_line.contains('▲');
                 if down&&up{partial=true;continue;}
                 let marker=if down{ObservationScheduleMarker::POSTPONED}else if up{ObservationScheduleMarker::RESCHEDULED}else{continue;};seen=true;
-                let Ok(date_track)=notice_track(date_line)else{partial=true;continue;};
-                if line_track.is_some()&&date_track.is_some()&&line_track!=date_track{partial=true;continue;}
-                let track=date_track.or_else(||line_track.clone()).unwrap_or(ObservationTrack::UNKNOWN);
-                let mut o=observation(c,r,None,title.into(),Some(season),Some(number.clone()),track);o.source_raw_text=Some(route::join(&[coordinate," ",date_line]));
-                if o.source_raw_text.as_ref().is_some_and(|s|s.len()>2048){partial=true;continue;}
-                o.schedule_marker=marker;o.correction_marker=Some("POSTPONEMENT_NOTICE_UNBOUND".into());o.diagnostics.push(diagnostic("UNBOUND_PROVIDER_IDENTITY"));push_unique(&mut out,&mut hashes,o)?;
+                let Ok(date_tracks)=notice_tracks(date_line)else{partial=true;continue;};
+                let tracks=if !line_tracks.is_empty()&&!date_tracks.is_empty(){
+                    if date_tracks.iter().any(|t|!line_tracks.contains(t)){partial=true;continue;}date_tracks.clone()
+                }else if !date_tracks.is_empty(){date_tracks.clone()}else if !line_tracks.is_empty(){line_tracks.clone()}else{vec![ObservationTrack::UNKNOWN]};
+                for track in tracks{
+                    let mut o=observation(c,r,None,title.into(),Some(season),None,Some(number.clone()),track);o.source_raw_text=Some(route::join(&[coordinate," ",date_line]));
+                    if o.source_raw_text.as_ref().is_some_and(|s|s.len()>2048){partial=true;continue;}
+                    o.schedule_marker=marker;o.correction_marker=Some("POSTPONEMENT_NOTICE_UNBOUND".into());o.diagnostics.push(diagnostic("UNBOUND_PROVIDER_IDENTITY"));push_unique(&mut out,&mut hashes,o)?;
+                }
             }if !seen{partial=true;}
         }
     }Ok((out,partial))

@@ -34,7 +34,7 @@ fn target()->ExtensionTargetV1{ExtensionTargetV1{target_token:"t1".into(),provid
 }
 #[test]fn multiple_wall_dates_or_times_are_ambiguous(){
     let recent=listing(SourceRole::RECENT,&RECENT.replace("30.09.2026","30.09.2026 01.10.2026"));assert!(recent.observations.is_empty());
-    let calendar=listing(SourceRole::CALENDAR,&CALENDAR.replace("12:00 Uhr","12:00 13:00 Uhr"));assert!(calendar.observations.is_empty());
+    let calendar=listing(SourceRole::CALENDAR,&CALENDAR.replace(" Uhr"," 13:00 Uhr"));assert!(calendar.observations.is_empty());
 }
 #[test]fn missing_episode_metadata_is_failure_not_absence(){
     let mut c=context(vec![SourceRole::DIRECT]);c.targets.push(target());let o:ParseOutputV1=decode(&parse(&parse_input(c,vec![response(SourceRole::DIRECT,include_str!("../fixtures/missing-episode.html"))])),1048576).unwrap();

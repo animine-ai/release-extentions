@@ -9,6 +9,7 @@ pub fn id(value: &str) -> Result<(), Error> {
     ensure(!value.is_empty() && value.len() <= 128 && value.as_bytes()[0].is_ascii_alphanumeric() &&
         value.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b)))
 }
+#[cfg(test)]
 fn depth(bytes: &[u8]) -> Result<(), Error> {
     let (mut level, mut quoted, mut escaped) = (0u32, false, false);
     for b in bytes {
@@ -21,7 +22,9 @@ fn depth(bytes: &[u8]) -> Result<(), Error> {
     ensure(level==0 && !quoted)
 }
 pub fn decode<T: Wire + Validate>(bytes: &[u8], cap: usize) -> Result<T, Error> {
-    ensure(!bytes.is_empty() && bytes.len()<=cap)?; depth(bytes)?;
+    // wire::Parser enforces the same 16-container depth while parsing, including
+    // empty containers. Avoid a redundant full-body scan before UTF-8/JSON validation.
+    ensure(!bytes.is_empty() && bytes.len()<=cap)?;
     let value=T::from_value(parse(bytes)?)?;
     value.validate()?; Ok(value)
 }

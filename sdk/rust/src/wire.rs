@@ -4,6 +4,18 @@ use crate::bounded::{Error,ensure};
 #[derive(Clone)]
 pub enum Value { Null, Bool(bool), Int(i32), Text(String), Array(Vec<Value>), Object(Vec<(String,Value)>) }
 pub trait Wire:Sized { fn from_value(value:Value)->Result<Self,Error>; fn to_value(&self)->Value; }
+#[inline(always)]
+fn has_zero(v:u64)->bool{v.wrapping_sub(0x0101010101010101)&!v&0x8080808080808080!=0}
+// UTF-8 is validated at parse entry. Word scans only locate ASCII JSON boundaries.
+#[inline(always)]
+fn text_span(bytes:&[u8],mut pos:usize)->usize{
+    while bytes.len()-pos>=8{
+        let b=&bytes[pos..pos+8];let word=u64::from_le_bytes([b[0],b[1],b[2],b[3],b[4],b[5],b[6],b[7]]);
+        if has_zero(word^0x2222222222222222)||has_zero(word^0x5c5c5c5c5c5c5c5c)||has_zero(word&0xe0e0e0e0e0e0e0e0){break;}
+        pos+=8;
+    }
+    while pos<bytes.len()&&bytes[pos]>=32&&bytes[pos]!=b'"'&&bytes[pos]!=b'\\'{pos+=1;}pos
+}
 impl Wire for String {
     fn from_value(v:Value)->Result<Self,Error>{if let Value::Text(s)=v{Ok(s)}else{Err(Error::Json)}}
     fn to_value(&self)->Value{Value::Text(self.clone())}
@@ -59,16 +71,22 @@ impl<'a> Parser<'a>{
                     else{ensure(!(0xdc00..=0xdfff).contains(&n))?;}
                     s.push(char::from_u32(n).ok_or(Error::Json)?);
                 },_=>return Err(Error::Json)}
-            }else{ensure(b>=32)?;let c=self.text.get(self.pos..).ok_or(Error::Json)?.chars().next().ok_or(Error::Json)?;self.pos+=c.len_utf8();s.push(c);}
+            }else{
+                // The complete input is already UTF-8 validated. Copy a whole unescaped
+                // span once instead of decoding and growing the output per character.
+                // JSON quotes/backslashes are ASCII boundaries, so this preserves UTF-8.
+                ensure(b>=32)?;let start=self.pos;self.pos=text_span(self.text.as_bytes(),self.pos);
+                s.push_str(self.text.get(start..self.pos).ok_or(Error::Json)?);
+            }
         }
     }
     fn value(&mut self,depth:u32)->Result<Value,Error>{
         ensure(depth<=16)?;self.ws();match self.peek().ok_or(Error::Json)?{
             b'"'=>Ok(Value::Text(self.text()?)),b'n'=>{self.literal("null")?;Ok(Value::Null)},b't'=>{self.literal("true")?;Ok(Value::Bool(true))},b'f'=>{self.literal("false")?;Ok(Value::Bool(false))},
-            b'['=>{self.pos+=1;self.ws();let mut a=Vec::new();if self.peek()==Some(b']'){self.pos+=1;return Ok(Value::Array(a));}
+            b'['=>{ensure(depth<16)?;self.pos+=1;self.ws();let mut a=Vec::new();if self.peek()==Some(b']'){self.pos+=1;return Ok(Value::Array(a));}
                 loop{ensure(a.len()<512)?;a.push(self.value(depth+1)?);self.ws();if self.peek()==Some(b']'){self.pos+=1;break;}self.byte(b',')?;}
                 Ok(Value::Array(a))},
-            b'{'=>{self.pos+=1;self.ws();let mut fields:Vec<(String,Value)>=Vec::new();if self.peek()==Some(b'}'){self.pos+=1;return Ok(Value::Object(fields));}
+            b'{'=>{ensure(depth<16)?;self.pos+=1;self.ws();let mut fields:Vec<(String,Value)>=Vec::new();if self.peek()==Some(b'}'){self.pos+=1;return Ok(Value::Object(fields));}
                 loop{self.ws();ensure(fields.len()<256)?;let name=self.text()?;ensure(!fields.iter().any(|(n,_)|n==&name))?;self.ws();self.byte(b':')?;let value=self.value(depth+1)?;fields.push((name,value));self.ws();if self.peek()==Some(b'}'){self.pos+=1;break;}self.byte(b',')?;}
                 Ok(Value::Object(fields))},
             b'-'|b'0'..=b'9'=>{let start=self.pos;if self.peek()==Some(b'-'){self.pos+=1;}
@@ -83,7 +101,12 @@ pub fn parse(bytes:&[u8])->Result<Value,Error>{
     let text=core::str::from_utf8(bytes).map_err(|_|Error::Json)?;let mut p=Parser{text,pos:0};let value=p.value(0)?;p.ws();ensure(p.pos==text.len())?;Ok(value)
 }
 fn write_text(s:&str,out:&mut Vec<u8>){
-    out.push(b'"');for c in s.chars(){match c{'"'=>out.extend_from_slice(b"\\\""),'\\'=>out.extend_from_slice(b"\\\\"),'\n'=>out.extend_from_slice(b"\\n"),'\r'=>out.extend_from_slice(b"\\r"),'\t'=>out.extend_from_slice(b"\\t"),'\x08'=>out.extend_from_slice(b"\\b"),'\x0c'=>out.extend_from_slice(b"\\f"),c if (c as u32)<32=>{let n=c as u8;out.extend_from_slice(b"\\u00");out.push(b"0123456789abcdef"[(n>>4) as usize]);out.push(b"0123456789abcdef"[(n&15) as usize]);},c=>{let mut buf=[0;4];out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());}}}out.push(b'"');
+    out.push(b'"');let bytes=s.as_bytes();let mut pos=0;
+    while pos<bytes.len(){
+        let end=text_span(bytes,pos);out.extend_from_slice(&bytes[pos..end]);pos=end;
+        if pos==bytes.len(){break;}let b=bytes[pos];pos+=1;
+        match b{b'"'=>out.extend_from_slice(b"\\\""),b'\\'=>out.extend_from_slice(b"\\\\"),b'\n'=>out.extend_from_slice(b"\\n"),b'\r'=>out.extend_from_slice(b"\\r"),b'\t'=>out.extend_from_slice(b"\\t"),8=>out.extend_from_slice(b"\\b"),12=>out.extend_from_slice(b"\\f"),n=>{out.extend_from_slice(b"\\u00");out.push(b"0123456789abcdef"[(n>>4) as usize]);out.push(b"0123456789abcdef"[(n&15) as usize]);}}
+    }out.push(b'"');
 }
 fn write(v:&Value,out:&mut Vec<u8>){
     match v{Value::Null=>out.extend_from_slice(b"null"),Value::Bool(b)=>out.extend_from_slice(if *b{b"true"}else{b"false"}),Value::Text(s)=>write_text(s,out),Value::Int(n)=>{
@@ -98,4 +121,21 @@ mod tests{
     use super::*;
     #[test]fn strict_json(){for b in [b"{\"x\":0,\"x\":1}".as_slice(),b"1.0",b"01",b"\"\\ud800\"",b"[1,]",b"true false"]{assert!(parse(b).is_err());}}
     #[test]fn unicode_and_escape_roundtrip(){let s=String::from("😀\n\0\\\"");let encoded=serialize(&Value::Text(s.clone()));let Value::Text(back)=parse(&encoded).unwrap()else{panic!()};assert_eq!(s,back);let Value::Text(pair)=parse(br#""\ud83d\ude00""#).unwrap()else{panic!()};assert_eq!(pair,"😀");}
+    #[test]fn long_utf8_spans_preserve_boundaries_and_reject_raw_controls(){
+        let s="<section>日本語 😀 & text</section>".repeat(16384);let encoded=serialize(&Value::Text(s.clone()));
+        let Value::Text(back)=parse(&encoded).unwrap()else{panic!()};assert_eq!(s,back);
+        assert!(parse(b"\"before\x01after\"").is_err());assert!(parse(b"\"unterminated").is_err());
+    }
+    #[test]fn parser_bounds_empty_container_depth(){
+        for leaf in ["0","[]","{}"]{
+            let valid=alloc::format!("{}{}{}","[".repeat(15),leaf,"]".repeat(15));assert!(parse(valid.as_bytes()).is_ok());
+            let invalid=alloc::format!("{}{}{}","[".repeat(17),leaf,"]".repeat(17));assert!(parse(invalid.as_bytes()).is_err());
+        }
+    }
+    #[test]fn word_scans_preserve_all_ascii_escapes_at_every_alignment(){
+        for offset in 0..16{
+            let mut s="日".repeat(offset);for c in 0u8..=127{s.push(c as char);}s.push_str("😀tail");
+            let Value::Text(back)=parse(&serialize(&Value::Text(s.clone()))).unwrap()else{panic!()};assert_eq!(s,back);
+        }
+    }
 }

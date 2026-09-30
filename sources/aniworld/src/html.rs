@@ -100,6 +100,15 @@ impl<'a> Document<'a> {
             }
             if closing {
                 if void(&tag) { continue; }
+                // Current provider series/episode pages omit only the outer #wrapper
+                // close before </body>. Close that one exact layout node at this explicit
+                // boundary. All other mismatches and incomplete documents still reject.
+                if tag=="body"&&stack.len()==4{
+                    let n=stack[3];let parent=stack[2];
+                    if nodes[n].tag=="div"&&nodes[n].attr("id")==Some("wrapper")&&nodes[parent].tag=="body"{
+                        nodes[n].end=nodes.len();stack.pop();
+                    }
+                }
                 let current=*stack.last().ok_or(())?;
                 if current==0 || nodes[current].tag!=tag { return Err(()); }
                 nodes[current].end=nodes.len(); stack.pop(); continue;
@@ -152,4 +161,8 @@ impl<'a> Document<'a> {
     use super::*;
     #[test] fn bounds_and_truncation(){assert!(Document::parse("<a>").is_err());assert!(Document::parse("<a href='x' href='y'></a>").is_err());assert!(Document::parse(&"<div>".repeat(65)).is_err());}
     #[test] fn entities_and_inert_bytes(){let d=Document::parse("<main><script><a href='bad'>fake</a></script><h1>A &amp; B &#039; &#x1f600;</h1></main>").unwrap();assert_eq!(d.text(1,128).unwrap(),"A & B ' 😀");assert!(entities("&#0;").is_err());}
+    #[test] fn observed_outer_wrapper_omission_is_narrow(){
+        assert!(Document::parse("<html><body><div id='wrapper'><h1>A</h1></body></html>").is_ok());
+        for s in ["<html><body><div id='other'><h1>A</h1></body></html>","<html><body><div id='wrapper'><div></body></html>","<html><body><div id='wrapper'><h1>A</h1>"]{assert!(Document::parse(s).is_err());}
+    }
 }

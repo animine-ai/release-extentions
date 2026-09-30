@@ -1,5 +1,5 @@
 use super::*;
-use alloc::{string::{String,ToString},vec};
+use alloc::{string::ToString,vec};
 use arex_sdk::*;
 use bounded::{decode,encode};
 const RECENT:&str=include_str!("../fixtures/recent.html");

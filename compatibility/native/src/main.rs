@@ -3,7 +3,8 @@ use std::{env,fs,path::Path};
 use wasmtime::{Caller,Engine,Linker,Module,Store};
 mod host_engine;
 fn run(engine:&Engine,module:&Module,export:&str,input:&[u8])->Result<Vec<u8>>{
-    let mut store=Store::new(engine,(0usize,0usize));store.set_fuel(10_000_000)?;store.set_epoch_deadline(1);
+    let fuel=if export.starts_with("parse_"){20_000_000}else{10_000_000};
+    let mut store=Store::new(engine,(0usize,0usize));store.set_fuel(fuel)?;store.set_epoch_deadline(1);
     let mut linker=Linker::new(engine);
     linker.func_wrap("arex_v1","diagnostic",|mut caller:Caller<'_,(usize,usize)>,p:i32,n:i32|->wasmtime::Result<i32>{
       let result=(||->Result<i32>{

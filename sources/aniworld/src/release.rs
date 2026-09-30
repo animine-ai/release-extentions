@@ -1,4 +1,4 @@
-use alloc::{string::{String,ToString},vec,vec::Vec};
+use alloc::{collections::BTreeMap,string::{String,ToString},vec,vec::Vec};
 use arex_sdk::*;
 use bounded::{decode,encode};
 use crate::{error,identity,page,route,html::Document,Result};
@@ -43,19 +43,18 @@ fn observation(c:&ExtensionContextV1,r:&ResponseEnvelope,key:Option<String>,titl
         claim_kind:match r.source_role{SourceRole::CALENDAR=>ObservationClaimKind::FORECAST,SourceRole::RECENT=>ObservationClaimKind::RELEASE_LISTING,SourceRole::POSTPONEMENT=>ObservationClaimKind::CORRECTION,SourceRole::DIRECT=>ObservationClaimKind::DIRECT_AVAILABILITY},source_date_text:None,source_time_text:None,source_raw_text:None,parsed_timestamp:None,approximate:false,schedule_marker:ObservationScheduleMarker::NONE,correction_marker:None,source_url:r.final_url.clone().unwrap_or_default(),source_hash:r.source_hash.clone().unwrap_or_default(),diagnostics:vec![]}
 }
 fn heading(d:&Document,text:&str)->Result<()>{let h=d.unique(1..d.nodes.len(),|n|n.tag=="h1")?;if d.text(h,256)?!=text{return Err(());}Ok(())}
-fn push_unique(out:&mut Vec<ProviderObservationV1>,hashes:&mut Vec<u64>,o:ProviderObservationV1)->Result<()>{
-    // This hash is only an equality prefilter. A collision still requires full DTO
-    // equality, so no observation, language track or correction can be lost to it.
+fn push_unique(out:&mut Vec<ProviderObservationV1>,hashes:&mut BTreeMap<u64,Vec<usize>>,o:ProviderObservationV1)->Result<()>{
+    // The hash is only an index. Collisions still compare the complete DTO.
     let mut h=14695981039346656037u64;
     for s in [o.provider_series_key.as_deref().unwrap_or(""),o.installment.number.as_deref().unwrap_or("")]{for b in s.bytes(){h=(h^(b as u64)).wrapping_mul(1099511628211);}h=h.wrapping_mul(1099511628211);}
     h^=(o.source_season.unwrap_or(0) as u64)<<8;h^=o.track.clone() as u64;
-    if hashes.iter().zip(out.iter()).any(|(v,p)|*v==h&&p==&o){return Ok(());}
-    if out.len()>=512{return Err(());}hashes.push(h);out.push(o);Ok(())
+    if hashes.get(&h).is_some_and(|indices|indices.iter().any(|i|out.get(*i)==Some(&o))){return Ok(());}
+    if out.len()>=512{return Err(());}let index=out.len();out.push(o);hashes.entry(h).or_default().push(index);Ok(())
 }
 fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<ProviderObservationV1>,bool)>{
     let calendar=r.source_role==SourceRole::CALENDAR;heading(d,if calendar{"Animekalender"}else{"Neue Episoden"})?;
     let list=if calendar{0}else{d.unique(1..d.nodes.len(),|n|n.class("newEpisodeList"))?};
-    let mut out=vec![];let mut hashes=vec![];let mut rows=0;let mut partial=false;
+    let mut out=vec![];let mut hashes=BTreeMap::new();let mut rows=0;let mut partial=false;
     for a in d.descendants(list){
         if d.nodes[a].tag!="a"{continue;}let Some(href)=d.nodes[a].attr("href")else{continue;};
         if !href.contains("/anime/stream/"){continue;}if calendar&&d.nearest_class(a,"calendarList").is_none(){continue;}
@@ -96,7 +95,7 @@ fn direct(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document,p:&RequestSpec)-
 fn postponed(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<ProviderObservationV1>,bool)>{
     let article=d.unique(1..d.nodes.len(),|n|n.class("supportFAQArticle")&&n.class("supportFAQHighlight"))?;
     let h=d.unique(d.descendants(article),|n|n.tag=="h1")?;if !d.text(h,256)?.starts_with("Animeverschiebungen"){return Err(());}
-    let p=d.unique(d.descendants(article),|n|n.tag=="p")?;let text=d.raw_text(p,32768)?;let mut out=vec![];let mut hashes=vec![];let mut partial=false;
+    let p=d.unique(d.descendants(article),|n|n.tag=="p")?;let text=d.raw_text(p,32768)?;let mut out=vec![];let mut hashes=BTreeMap::new();let mut partial=false;
     for block in text.split("----------------------------------------------------------------------"){
         let lines:Vec<_>=block.lines().map(str::trim).filter(|s|!s.is_empty()).collect();if lines.is_empty(){continue;}
         let title=lines[0].trim_start_matches(['⚠','\u{fe0f}','🚨','ℹ',' ']).trim();if title.is_empty()||title.len()>1024{continue;}

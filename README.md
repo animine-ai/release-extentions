@@ -103,9 +103,31 @@ printed in logs. Public root/index metadata can be prepared with `prepare-envelo
 signed by independent keys with `sign-envelope`, and verified with `verify-root` and
 `verify-package`. Detached signatures are not used.
 
-`sources/aniworld` is **EP04 skeleton only**. Its allowed-host/publisher/key fields are
-deliberately unset and it cannot produce a publishable package. There are no live
-selectors, provider paths, scraping logic or production semantics here.
+`sources/aniworld` implements the **EP04 test-only `de.aniworld` v1** guest. The same
+module implements CALENDAR, RECENT, POSTPONEMENT and DIRECT plus overview/episode
+navigation. Its exact host grant is `aniworld.to`; provider identity is `aniworld`.
+All website parsing and route construction stay in this guest. Calendar output is
+forecast only, language tracks remain separate, and unlinked postponement notices
+remain unbound facts. Identity, Authority and canonical episode mapping remain host-owned.
+
+The provider fixture provenance is in `sources/aniworld/provenance-fixtures.json`.
+Fixtures are independently authored structural reconstructions with synthetic titles,
+slugs and redirect IDs. CI makes no provider requests. Original-host package/install
+and wire checks use the frozen source checksums in `compatibility/host-source-lock.json`.
+
+```sh
+bash tools/build_aniworld.sh build/aniworld
+python3 tools/arex.py test-aniworld-chain --module build/aniworld/wasm32v1-none/release/arex_aniworld.wasm --output build/aniworld-chain --source-repository https://github.com/animine-ai/release-extentions --source-commit FULL_SOURCE_COMMIT
+python3 tools/arex.py verify-aniworld-chain build/aniworld-chain
+python3 tools/aniworld_vectors.py
+```
+
+The AniWorld recipe uses Rust optimization level 3 and pinned Binaryen 133 `-O3`;
+the fixture recipe retains its established size optimization. Both are independently
+rebuilt and byte-compared in CI. Test-chain keys and pins are public deterministic
+fixtures, never production trust. Production publisher/key fields remain unset;
+production publication still requires the independent EP03 signing, trust-bootstrap
+and immutable-distribution gates.
 
 ## Immutable distribution
 

@@ -23,6 +23,20 @@ type Result<T> = core::result::Result<T, ()>;
 fn name_byte(b: u8) -> bool { b.is_ascii_alphanumeric() || b"-_:".contains(&b) }
 fn space(b: u8) -> bool { b.is_ascii_whitespace() }
 fn lower(value:&str)->Cow<'_,str>{if value.bytes().any(|b|b.is_ascii_uppercase()){Cow::Owned(value.to_ascii_lowercase())}else{Cow::Borrowed(value)}}
+#[inline(always)]
+fn find_byte(bytes:&[u8],mut pos:usize,needle:u8)->Option<usize>{
+    let pattern=(needle as u64)*0x0101010101010101;
+    while bytes.len()-pos>=8{
+        let b=&bytes[pos..pos+8];let word=u64::from_le_bytes([b[0],b[1],b[2],b[3],b[4],b[5],b[6],b[7]])^pattern;
+        if word.wrapping_sub(0x0101010101010101)&!word&0x8080808080808080!=0{break;}pos+=8;
+    }
+    while pos<bytes.len(){if bytes[pos]==needle{return Some(pos);}pos+=1;}None
+}
+fn comment_end(bytes:&[u8],mut pos:usize)->Option<usize>{
+    while let Some(at)=find_byte(bytes,pos,b'-'){
+        if bytes.get(at..at+3)==Some(b"-->"){return Some(at+3);}pos=at+1;
+    }None
+}
 fn void(tag: &str) -> bool {
     matches!(tag, "area"|"base"|"br"|"col"|"embed"|"hr"|"img"|"input"|"link"|"meta"|"param"|"source"|"track"|"wbr")
 }
@@ -60,16 +74,16 @@ impl<'a> Document<'a> {
         while i < bytes.len() {
             if nodes.len() >= MAX_NODES { return Err(()); }
             if bytes[i] != b'<' {
-                let start = i; i+=input.get(i..).ok_or(())?.find('<').unwrap_or(bytes.len()-i);
+                let start = i; i=find_byte(bytes,i,b'<').unwrap_or(bytes.len());
                 let text = input.get(start..i).ok_or(())?;
                 if !text.trim().is_empty() { let n=nodes.len(); nodes.push(Node { tag: "#text".into(), attrs: vec![], text, parent: *stack.last().ok_or(())?, end: n+1 }); }
                 continue;
             }
             if input.get(i..).ok_or(())?.starts_with("<!--") {
-                let n = input.get(i+4..).ok_or(())?.find("-->").ok_or(())?; i += n+7; continue;
+                i=comment_end(bytes,i+4).ok_or(())?;continue;
             }
             if bytes.get(i+1) == Some(&b'!') {
-                let n=input.get(i..).ok_or(())?.find('>').ok_or(())?; i+=n+1; continue;
+                i=find_byte(bytes,i,b'>').ok_or(())?+1;continue;
             }
             i += 1; let closing = bytes.get(i)==Some(&b'/'); if closing { i += 1; }
             let start=i; while i<bytes.len() && name_byte(bytes[i]) { i+=1; }
@@ -92,7 +106,7 @@ impl<'a> Document<'a> {
                     let quoted=bytes.get(i).copied().filter(|b|*b==b'\'' || *b==b'"');
                     if quoted.is_some() { i+=1; }
                     let v=i;
-                    if let Some(q)=quoted { i+=input.get(i..).ok_or(())?.find(q as char).ok_or(())?; }
+                    if let Some(q)=quoted { i=find_byte(bytes,i,q).ok_or(())?; }
                     else { while i<bytes.len() && !space(bytes[i]) && bytes[i]!=b'>' { i+=1; } }
                     if i-v>8192 { return Err(()); }
                     let raw=input.get(v..i).ok_or(())?;
@@ -119,7 +133,7 @@ impl<'a> Document<'a> {
             if matches!(tag.as_ref(),"script"|"style"|"noscript") && !self_closed {
                 let mut end=i;
                 while end<bytes.len() {
-                    end+=input.get(end..).ok_or(())?.find('<').unwrap_or(bytes.len()-end);
+                    end=find_byte(bytes,end,b'<').unwrap_or(bytes.len());
                     if end==bytes.len(){break;}
                     if bytes.get(end+1)==Some(&b'/') &&
                         input.get(end+2..end+2+tag.len()).is_some_and(|s|s.eq_ignore_ascii_case(&tag)) &&
@@ -127,7 +141,7 @@ impl<'a> Document<'a> {
                     end+=1;
                 }
                 if end==bytes.len() { return Err(()); }
-                let close=input.get(end..).ok_or(())?.find('>').ok_or(())?; i=end+close+1; continue;
+                i=find_byte(bytes,end,b'>').ok_or(())?+1;continue;
             }
             let n=nodes.len();nodes.push(Node { tag, attrs, text:"", parent:*stack.last().ok_or(())?,end:n+1 });
             if !self_closed && !void(&nodes[n].tag) { stack.push(n); if stack.len()>64 { return Err(()); } }
@@ -166,6 +180,11 @@ impl<'a> Document<'a> {
     use super::*;
     #[test] fn bounds_and_truncation(){assert!(Document::parse("<a>").is_err());assert!(Document::parse("<a href='x' href='y'></a>").is_err());assert!(Document::parse(&"<div>".repeat(65)).is_err());}
     #[test] fn entities_and_inert_bytes(){let d=Document::parse("<main><script><a href='bad'>fake</a></script><h1>A &amp; B &#039; &#x1f600;</h1></main>").unwrap();assert_eq!(d.text(1,128).unwrap(),"A & B ' 😀");assert!(entities("&#0;").is_err());}
+    #[test] fn byte_search_covers_every_boundary_and_utf8(){
+        for n in 0..32{let text=alloc::format!("{}😀<{}", "a".repeat(n),"b".repeat(32));assert_eq!(find_byte(text.as_bytes(),0,b'<'),text.find('<'));assert_eq!(find_byte(text.as_bytes(),0,b'z'),None);}
+        assert!(Document::parse("<main><!-- -- x --> <h1>A</h1></main>").is_ok());
+        assert!(Document::parse("<main><!-- -- x").is_err());
+    }
     #[test] fn observed_outer_wrapper_omission_is_narrow(){
         assert!(Document::parse("<html><body><div id='wrapper'><h1>A</h1></body></html>").is_ok());
         for s in ["<html><body><div id='other'><h1>A</h1></body></html>","<html><body><div id='wrapper'><div></body></html>","<html><body><div id='wrapper'><h1>A</h1>"]{assert!(Document::parse(s).is_err());}

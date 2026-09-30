@@ -15,7 +15,9 @@ fn run(engine:&Engine,module:&Module,export:&str,input:&[u8])->Result<Vec<u8>>{
     })?;
     let instance=linker.instantiate(&mut store,module)?;let memory=instance.get_memory(&mut store,"memory").unwrap();
     let alloc=instance.get_typed_func::<i32,i32>(&mut store,"arex_alloc")?;let free=instance.get_typed_func::<(i32,i32),()>(&mut store,"arex_free")?;
-    let ptr=alloc.call(&mut store,input.len() as i32)?;ensure!(ptr!=0,"allocation");memory.write(&mut store,ptr as u32 as usize,input)?;
+    let ptr=alloc.call(&mut store,input.len() as i32)?;ensure!(ptr!=0,"allocation");
+    ensure!(memory.data(&store).get(ptr as u32 as usize..ptr as u32 as usize+input.len()).is_some_and(|b|b.iter().all(|v|*v==0)),"fresh allocation was not zero initialized");
+    memory.write(&mut store,ptr as u32 as usize,input)?;
     let call=instance.get_typed_func::<(i32,i32),i64>(&mut store,export)?;let packed=call.call(&mut store,(ptr,input.len() as i32))? as u64;
     let p=(packed>>32) as u32 as usize;let len=packed as u32 as usize;ensure!(p>0 && len>0 && len<=1024*1024 && p.checked_add(len).is_some_and(|e|e<=memory.data_size(&store)),"output bounds");
     ensure!(p+len<=ptr as u32 as usize || p>=ptr as u32 as usize+input.len(),"overlapping input/output");

@@ -13,6 +13,21 @@
             }
         }
         unsafe fn dealloc(&self,_p:*mut u8,_l:Layout) {}
+        unsafe fn alloc_zeroed(&self,l:Layout)->*mut u8 {
+            // WASM initializes this arena to zero and allocations never reuse a range.
+            // Avoid clearing a fresh input/string buffer a second time in guest code.
+            unsafe { self.alloc(l) }
+        }
+        unsafe fn realloc(&self,p:*mut u8,l:Layout,n:usize)->*mut u8 {
+            if n<=l.size(){return p;}
+            let base=core::ptr::addr_of_mut!(HEAP.0).cast::<u8>() as usize;
+            let offset=(p as usize)-base;let end=offset+l.size();
+            if let Some(new_end)=offset.checked_add(n).filter(|v|*v<=16*1024*1024){
+                if USED.compare_exchange(end,new_end,Ordering::Relaxed,Ordering::Relaxed).is_ok(){return p;}
+            }
+            let Ok(layout)=Layout::from_size_align(n,l.align())else{core::arch::wasm32::unreachable();};
+            let next=unsafe { self.alloc(layout) };unsafe { core::ptr::copy_nonoverlapping(p,next,l.size()) };next
+        }
     }
     // Each host operation uses a fresh instance; the bounded arena dies with it.
     #[global_allocator] static ALLOC:Arena=Arena;

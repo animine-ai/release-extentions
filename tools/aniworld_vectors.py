@@ -1,5 +1,6 @@
 """Hermetic host/Android wire inputs. No provider/network calls, ever."""
 import copy, hashlib, json, sys
+from html.parser import HTMLParser
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 OUT=Path(sys.argv[1] if len(sys.argv)>1 else ROOT/'build/aniworld-inputs')
@@ -21,6 +22,26 @@ def response(role,body):
 def release_case(prefix,role,body,count,outcome,unknown=False):
     c=copy.deepcopy(context);c['sourceRoles']=[role]
     put(prefix+'-release-parse',{'schemaVersion':1,'context':c,'responses':[response(role,body)]},count=count,outcomes=[outcome],unknown=unknown)
+class StartTagCounter(HTMLParser):
+    def __init__(self):super().__init__();self.count=0
+    def handle_starttag(self,tag,attrs):self.count+=1
+    def handle_startendtag(self,tag,attrs):self.count+=1
+def padded_page(body,target_bytes,target_start_tags,missing_wrapper_close=False):
+    if missing_wrapper_close:body=body.replace('<body>','<body>\n  <div id="wrapper">',1)
+    counter=StartTagCounter();counter.feed(body);needed=target_start_tags-counter.count
+    if needed<0:raise ValueError('synthetic base exceeds target tag density')
+    noise='<aside><span>ignored synthetic layout padding</span></aside>'*(needed//2)
+    if needed%2:noise+='<aside></aside>'
+    if '</body>' not in body:raise ValueError('synthetic page needs a body close')
+    before,after=body.rsplit('</body>',1)
+    fixed=(before+noise+'<!----></body>'+after).encode('utf-8')
+    comment_bytes=target_bytes-len(fixed)
+    if comment_bytes<0:raise ValueError('synthetic base exceeds target byte size')
+    result=before+noise+'<!--'+('x'*comment_bytes)+'--></body>'+after
+    if len(result.encode('utf-8'))!=target_bytes:raise AssertionError('synthetic byte sizing')
+    verify=StartTagCounter();verify.feed(result)
+    if verify.count!=target_start_tags:raise AssertionError('synthetic tag sizing')
+    return result
 put('release-plan',{'schemaVersion':1,'context':context},count=4)
 responses=[response(r,(FIX/({'CALENDAR':'calendar','RECENT':'recent','POSTPONEMENT':'postponement','DIRECT':'episode'}[r]+'.html')).read_text()) for r in roles]
 put('release-parse',{'schemaVersion':1,'context':context,'responses':responses},count=7,outcomes=['SUCCESS']*4)
@@ -34,6 +55,23 @@ release_case('empty','RECENT','',0,'FAILURE')
 release_case('missing-direct','DIRECT',(FIX/'missing-episode.html').read_text(),0,'FAILURE')
 bad=response('RECENT',(FIX/'recent.html').read_text());bad['finalUrl']=urls['CALENDAR']
 c=copy.deepcopy(context);c['sourceRoles']=['RECENT'];put('redirect-release-parse',{'schemaVersion':1,'context':c,'responses':[bad]},count=0,outcomes=['FAILURE'])
+calendar_large=padded_page((FIX/'calendar.html').read_text(),326112,1516)
+release_case('calendar-large-dom','CALENDAR',calendar_large,2,'SUCCESS')
+recent_row='''
+      <div class="col-md-12"><div class="row"><div class="col-md-12">
+        <a href="/anime/stream/{key}/staffel-1/episode-1">
+          <strong>{title}</strong><span class="listTag bigListTag blue2">S01 E01</span>
+          <span class="elementFloatRight">30.09.2026</span>
+        </a>
+        <img class="flag" title="Episode 1 mit deutschen Untertiteln" alt="Deutsche Untertitel Flagge, German Subtitle Flag">
+        <span class="listTag bigListTag green right">Neu!</span>
+      </div></div></div>'''
+recent_rows=''.join(recent_row.format(key=f'synthetic-series-{n:03d}',title=f'Synthetic Series {n:03d}') for n in range(1,146))
+recent_large='''<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Synthetic recent</title></head>
+<body><div class="container"><div class="pageTitle pageCenter"><h1>Neue Episoden</h1></div>
+<div class="newEpisodeList"><div class="rows">'''+recent_rows+'''</div><div class="cf"></div></div></div></body></html>'''
+recent_large=padded_page(recent_large,205679,1367)
+release_case('recent-145-rows-large-dom','RECENT',recent_large,145,'SUCCESS')
 def nav(prefix,kind,body,season=None,number=None,track=None,count=1):
     c={'schemaVersion':1,'extensionId':'de.aniworld','providerId':'aniworld','observedAt':NOW,'targetKind':kind,'targetToken':'n1','providerSeriesKey':'fixture-series','providerRouteHint':None,'sourceSeason':season,'providerEpisode':number,'track':track}
     url=ORIGIN+'/anime/stream/fixture-series'+('' if season is None else '/staffel-'+str(season))+('' if number is None else '/episode-'+number)
@@ -47,5 +85,9 @@ nav('missing-episode','EPISODE',(FIX/'missing-episode.html').read_text(),1,'1','
 nav('unavailable-dub-episode','EPISODE',episode,1,'1','DE_DUB',0)
 nav('split-episode','EPISODE',episode.replace('staffel-1/episode-1','staffel-2/episode-15').replace('data-season="1"','data-season="2"').replace('data-episode="1"','data-episode="15"'),2,'15','DE_SUB')
 nav('canonical-mismatch-episode','EPISODE',episode.replace('href="https://aniworld.to/anime/stream/fixture-series','href="https://aniworld.to/anime/stream/other'),1,'1','DE_SUB',0)
+overview_large=padded_page((FIX/'series.html').read_text(),70*1024,620,missing_wrapper_close=True)
+nav('overview-large-missing-wrapper-close','OVERVIEW',overview_large,count=1)
+episode_large=padded_page(episode,90*1024,620,missing_wrapper_close=True)
+nav('episode-large-missing-wrapper-close','EPISODE',episode_large,1,'1','DE_SUB',1)
 (OUT/'cases.json').write_text(json.dumps(cases,indent=2)+'\n')
 print('Wrote',len(cases),'hermetic provider inputs')

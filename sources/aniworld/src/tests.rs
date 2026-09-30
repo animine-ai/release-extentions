@@ -46,6 +46,11 @@ fn target()->ExtensionTargetV1{ExtensionTargetV1{target_token:"t1".into(),provid
 #[test]fn malformed_coordinates_do_not_release(){for marker in ["S01 E02","S01 E1-3","S? E01","S01 E01.5"]{let o=listing(SourceRole::RECENT,&RECENT.replace("S01 E01",marker));assert!(o.observations.is_empty());}}
 #[test]fn unknown_tracks_are_explicit(){let body=RECENT.replace("Episode 1 mit deutschen Untertiteln","unknown").replace("Deutsche Untertitel Flagge, German Subtitle Flag","unknown").replace("Episode 1 auf Deutsch","unknown").replace("Deutsche Flagge, German Flag","unknown");let o=listing(SourceRole::RECENT,&body);assert!(!o.observations.is_empty());assert!(o.observations.iter().all(|o|o.track==ObservationTrack::UNKNOWN));}
 #[test]fn duplicate_entries_collapse(){let o=listing(SourceRole::RECENT,include_str!("../fixtures/duplicate-row.html"));assert_eq!(o.observations,listing(SourceRole::RECENT,RECENT).observations);}
+#[test]fn dedup_preserves_same_coordinates_with_distinct_wall_dates(){
+    let duplicate=include_str!("../fixtures/duplicate-row.html");let split=duplicate.replacen("30.09.2026","01.10.2026",1);
+    let o=listing(SourceRole::RECENT,&split);assert_eq!(o.observations.len(),3);
+    assert_eq!(o.observations.iter().filter(|v|v.track==ObservationTrack::DE_SUB).count(),2);
+}
 #[test]fn response_provenance_and_transport_fail_closed(){let c=context(vec![SourceRole::RECENT]);for variant in 0..4{let mut r=response(SourceRole::RECENT,RECENT);match variant{0=>r.final_url=Some(route::CALENDAR.into()),1=>r.source_hash=Some("X".repeat(64)),2=>r.http_status=Some(403),_=>r.status=ExtensionResponseStatus::CANCELLED};let o:ParseOutputV1=decode(&parse(&parse_input(c.clone(),vec![r])),1048576).unwrap();assert!(o.observations.is_empty());assert_eq!(o.response_reports[0].outcome,ExtensionReportOutcome::FAILURE);}}
 #[test]fn overview_exact_and_bound(){let o=navigate(nav(NavigationTargetKind::OVERVIEW),SERIES);assert_eq!(o.targets.len(),1);assert_eq!(o.targets[0].url,"https://aniworld.to/anime/stream/fixture-series");assert_eq!(o.targets[0].request_id.as_deref(),Some("navigation"));}
 #[test]fn episode_exact_no_overview_fallback(){let c=nav(NavigationTargetKind::EPISODE);let o=navigate(c.clone(),EPISODE);assert_eq!(o.targets.len(),1);assert_eq!(o.targets[0].provider_episode.as_deref(),Some("1"));assert!(navigate(c,SERIES).targets.is_empty());}

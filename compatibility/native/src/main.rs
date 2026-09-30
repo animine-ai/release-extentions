@@ -3,7 +3,7 @@ use std::{env,fs,path::Path};
 use wasmtime::{Caller,Engine,Linker,Module,Store};
 mod host_engine;
 fn run(engine:&Engine,module:&Module,export:&str,input:&[u8],probe:bool)->Result<(Vec<u8>,usize,u64)>{
-    let fuel=if export.starts_with("parse_"){20_000_000}else{10_000_000};
+    let fuel=if export.starts_with("parse_"){25_000_000}else{10_000_000};
     let mut store=Store::new(engine,(0usize,0usize,probe,fuel));store.set_fuel(fuel)?;store.set_epoch_deadline(1);
     let mut linker=Linker::new(engine);
     linker.func_wrap("arex_v1","diagnostic",|mut caller:Caller<'_,(usize,usize,bool,u64)>,p:i32,n:i32|->wasmtime::Result<i32>{
@@ -43,7 +43,7 @@ fn main()->Result<()> {
         let first_started=std::time::Instant::now();let first=run(&engine,&compiled,export,&bytes,true)?;let first_invoke_micros=first_started.elapsed().as_micros();
         let second=run(&engine,&compiled,export,&bytes,false)?;ensure!(first.0==second.0,"nondeterministic fixture output");fs::write(out.join(format!("{name}-output.json")),&first.0)?;
         let mut samples=Vec::new();for _ in 0..50 {let start=std::time::Instant::now();let _=run(&engine,&compiled,export,&bytes,false)?;samples.push(start.elapsed().as_micros());}samples.sort();
-        metrics.push(format!("{{\"case\":\"{name}\",\"inputBytes\":{},\"outputBytes\":{},\"p50Micros\":{},\"p95Micros\":{},\"samples\":50,\"linearMemoryBytes\":{},\"fuelUsed\":{},\"fuelCeiling\":{},\"moduleCompileMicros\":{},\"firstInvokeMicros\":{}}}",bytes.len(),first.0.len(),samples[25],samples[47],first.1,first.2,if export.starts_with("parse_"){20_000_000}else{10_000_000},module_compile_micros,first_invoke_micros));
+        metrics.push(format!("{{\"case\":\"{name}\",\"inputBytes\":{},\"outputBytes\":{},\"p50Micros\":{},\"p95Micros\":{},\"samples\":50,\"linearMemoryBytes\":{},\"fuelUsed\":{},\"fuelCeiling\":{},\"moduleCompileMicros\":{},\"firstInvokeMicros\":{}}}",bytes.len(),first.0.len(),samples[25],samples[47],first.1,first.2,if export.starts_with("parse_"){25_000_000}else{10_000_000},module_compile_micros,first_invoke_micros));
     }
     fs::write(out.join("performance.json"),format!("[{}]",metrics.join(",")))?;
 

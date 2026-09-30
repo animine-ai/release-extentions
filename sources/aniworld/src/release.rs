@@ -116,7 +116,7 @@ fn postponed(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec
                 for track in tracks{
                     let mut o=observation(c,r,None,title.into(),Some(season),None,Some(number.clone()),track);o.source_raw_text=Some(route::join(&[coordinate," ",date_line]));
                     if o.source_raw_text.as_ref().is_some_and(|s|s.len()>2048){partial=true;continue;}
-                    o.schedule_marker=marker;o.correction_marker=Some("POSTPONEMENT_NOTICE_UNBOUND".into());o.diagnostics.push(diagnostic("UNBOUND_PROVIDER_IDENTITY"));push_unique(&mut out,&mut hashes,o)?;
+                    o.schedule_marker=marker.clone();o.correction_marker=Some("POSTPONEMENT_NOTICE_UNBOUND".into());o.diagnostics.push(diagnostic("UNBOUND_PROVIDER_IDENTITY"));push_unique(&mut out,&mut hashes,o)?;
                 }
             }if !seen{partial=true;}
         }

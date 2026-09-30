@@ -12,20 +12,29 @@ pub fn series(d:&Document,expected:&str)->Result<String>{
     let head=d.unique(1..d.nodes.len(),|n|n.class("series-title"))?;
     let h=d.unique(d.descendants(head),|n|n.tag=="h1")?;d.text(h,1024)
 }
-pub fn track(n:&Node)->Result<ObservationTrack>{
+enum TrackClass { German(ObservationTrack), Foreign }
+fn known_foreign(s:&str)->bool{
+    ["english","englisch","french","franz","spanish","spanisch","italian","italien","portugu","polish","poln","russian","russisch","japanese","japanisch","korean","chinese","chines","dutch","niederl","danish","dän","daen","swedish","schwed","norwegian","norweg","finnish","finn","czech","tschech","turkish","türk","tuerk","romanian","rumän","rumaen","hungarian","ungar","greek","griech","originalton"].iter().any(|m|s.contains(m))
+}
+fn track(n:&Node)->Result<TrackClass>{
     let mut markers=String::new();
     for name in ["src","data-src","alt","title"]{if let Some(v)=n.attr(name){markers.push_str(v);markers.push(' ');}}
     let s=markers.to_ascii_lowercase();
     let sub=s.contains("japanese-german.svg")||((s.contains("untertitel")||s.contains("ger-sub"))&&(s.contains("deutsch")||s.contains("german")||s.contains("ger-sub")||s.contains("de untertitel")));
     let dub=s.contains("/german.svg")||(!s.contains("untertitel")&&!s.contains("ger-sub")&&(s.contains("auf deutsch")||s.contains("deutsche flagge")||s.contains("german flag")));
-    if sub&&dub{return Err(());}Ok(if sub{ObservationTrack::DE_SUB}else if dub{ObservationTrack::DE_DUB}else{ObservationTrack::UNKNOWN})
+    if sub&&dub{return Err(());}
+    if sub{return Ok(TrackClass::German(ObservationTrack::DE_SUB));}
+    if dub{return Ok(TrackClass::German(ObservationTrack::DE_DUB));}
+    if known_foreign(&s){return Ok(TrackClass::Foreign);}
+    Err(())
 }
 pub fn tracks(d:&Document,n:usize)->Result<Vec<ObservationTrack>>{
     let mut out=vec![];let mut count=0;
     for i in d.descendants(n){if d.nodes[i].tag=="img"&&d.nodes[i].class("flag"){
-        count+=1;if count>16{return Err(());}let t=track(&d.nodes[i])?;if !out.contains(&t){out.push(t);}
+        count+=1;if count>16{return Err(());}
+        if let TrackClass::German(t)=track(&d.nodes[i])?{if !out.contains(&t){out.push(t);}}
     }}
-    if out.is_empty(){out.push(ObservationTrack::UNKNOWN);}Ok(out)
+    if count==0{return Err(());}Ok(out)
 }
 pub fn episode(d:&Document,expected:&str,season:i32,number:&str)->Result<(String,Vec<ObservationTrack>)>{
     let title=series(d,expected)?;
@@ -37,7 +46,7 @@ pub fn episode(d:&Document,expected:&str,season:i32,number:&str)->Result<(String
     for i in d.descendants(language){if d.nodes[i].tag=="img"{
         let key=d.nodes[i].attr("data-lang-key").ok_or(())?;
         if key.is_empty()||key.len()>4||!key.bytes().all(|b|b.is_ascii_digit())||mappings.iter().any(|(k,_)|k==key){return Err(());}
-        let t=track(&d.nodes[i])?;mappings.push((key.to_string(),t));if mappings.len()>16{return Err(());}
+        if let TrackClass::German(t)=track(&d.nodes[i])?{mappings.push((key.to_string(),t));if mappings.len()>16{return Err(());}}
     }}
     let mut available=vec![];let mut rows=0;
     for i in d.descendants(video){if d.nodes[i].tag=="li"&&d.nodes[i].attr("data-lang-key").is_some(){

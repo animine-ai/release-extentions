@@ -29,7 +29,9 @@ for prefix,role,count in [('calendar','CALENDAR',2),('recent','RECENT',2),('post
 for fixture,count,outcome in [('bot',0,'FAILURE'),('truncated',0,'FAILURE'),('malformed-date',0,'PARTIAL'),('duplicate-row',2,'SUCCESS'),('unknown-track',1,'SUCCESS')]:
     release_case(fixture,'RECENT',(FIX/(fixture+'.html')).read_text(),count,outcome,fixture=='unknown-track')
 release_case('empty','RECENT','',0,'FAILURE')
-release_case('missing-direct','DIRECT',(FIX/'missing-episode.html').read_text(),0,'SUCCESS')
+# A page that advertises a stream but lacks hosterSiteTitle coordinates has no
+# structural identity proof, so direct-release parsing must fail closed.
+release_case('missing-direct','DIRECT',(FIX/'missing-episode.html').read_text(),0,'FAILURE')
 bad=response('RECENT',(FIX/'recent.html').read_text());bad['finalUrl']=urls['CALENDAR']
 c=copy.deepcopy(context);c['sourceRoles']=['RECENT'];put('redirect-release-parse',{'schemaVersion':1,'context':c,'responses':[bad]},count=0,outcomes=['FAILURE'])
 def nav(prefix,kind,body,season=None,number=None,track=None,count=1):

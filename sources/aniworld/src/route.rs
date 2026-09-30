@@ -47,7 +47,8 @@ pub fn label(value:&str)->Option<(i32,String)>{
 }
 // Wall dates are retained without inventing a timezone/year or DST resolution.
 pub fn date(value:&str)->Option<String>{
-    let numeric=value.split_whitespace().find(|p|p.len()==10 && p.as_bytes().get(2)==Some(&b'.') && p.as_bytes().get(5)==Some(&b'.'))?;
+    let mut dates=value.split_whitespace().filter(|p|p.len()==10 && p.as_bytes().get(2)==Some(&b'.') && p.as_bytes().get(5)==Some(&b'.'));
+    let numeric=dates.next()?;if dates.next().is_some(){return None;}
     let parts:alloc::vec::Vec<_>=numeric.split('.').collect();if parts.len()!=3{return None;}
     if parts[0].len()!=2||parts[1].len()!=2||parts[2].len()!=4{return None;}
     let d=integer(parts[0],31)?;let m=integer(parts[1],12)?;let y=integer(parts[2],9999)?;
@@ -55,7 +56,8 @@ pub fn date(value:&str)->Option<String>{
     if d>max{return None;}Some(numeric.into())
 }
 pub fn time(value:&str)->Option<String>{
-    let t=value.split_whitespace().find(|s|s.len()==5 && s.as_bytes().get(2)==Some(&b':'))?;
+    let mut times=value.split_whitespace().filter(|s|s.len()==5 && s.as_bytes().get(2)==Some(&b':'));
+    let t=times.next()?;if times.next().is_some(){return None;}
     let (h,m)=t.split_once(':')?;if !h.bytes().all(|b|b.is_ascii_digit())||!m.bytes().all(|b|b.is_ascii_digit()){return None;}
     let h=h.parse::<u32>().ok()?;let m=m.parse::<u32>().ok()?;if h>23||m>59{return None;}Some(t.into())
 }

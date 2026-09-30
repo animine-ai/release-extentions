@@ -27,6 +27,19 @@ fn target()->ExtensionTargetV1{ExtensionTargetV1{target_token:"t1".into(),provid
 #[test]fn recent_sub_and_dub_separate(){let o=listing(SourceRole::RECENT,RECENT);assert_eq!(o.observations.len(),2);assert_eq!(o.observations[0].track,ObservationTrack::DE_SUB);assert_eq!(o.observations[1].track,ObservationTrack::DE_DUB);assert!(o.observations.iter().all(|o|o.claim_kind==ObservationClaimKind::RELEASE_LISTING&&o.provider_series_key.as_deref()==Some("fixture-series")));}
 #[test]fn forecast_never_confirms_even_online(){let body=CALENDAR.replace("~ 12:00 Uhr","~ 12:00 Uhr <span title='Stream online!'>online</span>");let o=listing(SourceRole::CALENDAR,&body);assert_eq!(o.observations.len(),2);assert!(o.observations.iter().all(|o|o.claim_kind==ObservationClaimKind::FORECAST&&o.approximate&&o.parsed_timestamp.is_none()));}
 #[test]fn postponements_are_unbound_facts(){let o=listing(SourceRole::POSTPONEMENT,POSTPONEMENT);assert_eq!(o.observations.len(),2);assert!(o.observations.iter().all(|o|o.provider_series_key.is_none()&&o.claim_kind==ObservationClaimKind::CORRECTION&&o.parsed_timestamp.is_none()&&o.schedule_marker==ObservationScheduleMarker::POSTPONED));assert_ne!(o.observations[0].track,o.observations[1].track);}
+#[test]fn conflicting_notice_markers_do_not_choose_a_track_or_direction(){
+    for body in [POSTPONEMENT.replace("(Sub)","(Sub) (Dub)").replace("(Dub)","(Sub) (Dub)"),POSTPONEMENT.replace("▼","▼ ▲")]{
+        let o=listing(SourceRole::POSTPONEMENT,&body);assert!(o.observations.is_empty());assert_eq!(o.response_reports[0].outcome,ExtensionReportOutcome::PARTIAL);
+    }
+}
+#[test]fn multiple_wall_dates_or_times_are_ambiguous(){
+    let recent=listing(SourceRole::RECENT,&RECENT.replace("30.09.2026","30.09.2026 01.10.2026"));assert!(recent.observations.is_empty());
+    let calendar=listing(SourceRole::CALENDAR,&CALENDAR.replace("12:00 Uhr","12:00 13:00 Uhr"));assert!(calendar.observations.is_empty());
+}
+#[test]fn missing_episode_metadata_is_failure_not_absence(){
+    let mut c=context(vec![SourceRole::DIRECT]);c.targets.push(target());let o:ParseOutputV1=decode(&parse(&parse_input(c,vec![response(SourceRole::DIRECT,include_str!("../fixtures/missing-episode.html"))])),1048576).unwrap();
+    assert!(o.observations.is_empty());assert_eq!(o.response_reports[0].outcome,ExtensionReportOutcome::FAILURE);
+}
 #[test]fn direct_requires_actual_track_and_hoster(){let mut c=context(vec![SourceRole::DIRECT]);c.targets.push(target());let o:ParseOutputV1=decode(&parse(&parse_input(c.clone(),vec![response(SourceRole::DIRECT,EPISODE)])),1048576).unwrap();assert_eq!(o.observations.len(),1);assert_eq!(o.observations[0].claim_kind,ObservationClaimKind::DIRECT_AVAILABILITY);c.targets[0].track=ObservationTrack::DE_DUB;let o:ParseOutputV1=decode(&parse(&parse_input(c,vec![response(SourceRole::DIRECT,EPISODE)])),1048576).unwrap();assert!(o.observations.is_empty());}
 #[test]fn empty_truncated_irrelevant_antibot_fail_closed(){for body in ["","<html><body><h1>Neue Episoden</h1>","<html><body><h1>Shop</h1></body></html>","<html><body><h1>Checking your browser</h1></body></html>"]{let o=listing(SourceRole::RECENT,body);assert!(o.observations.is_empty());assert_eq!(o.response_reports[0].outcome,ExtensionReportOutcome::FAILURE);}}
 #[test]fn malformed_dates_do_not_release(){for date in ["31.02.2026","99.09.2026","30.13.2026","30.09.XXXX"]{let o=listing(SourceRole::RECENT,&RECENT.replace("30.09.2026",date));assert!(o.observations.is_empty());assert_eq!(o.response_reports[0].outcome,ExtensionReportOutcome::PARTIAL);}}

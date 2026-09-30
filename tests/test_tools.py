@@ -1,4 +1,4 @@
-import copy, io, json, sys, unittest, zipfile
+import copy, io, json, sys, tempfile, unittest, zipfile
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 import arex as a
@@ -13,6 +13,32 @@ class ToolsTest(unittest.TestCase):
         a.verify_package(self.data,self.index['signed']['entries'][0],self.root,a.FIXTURE_NOW)
     def test_reproducible_package(self):
         d,m=a.build_package(b'\0asm\1\0\0\0','https://github.com/test/fixture','a'*40,a.test_key(4),b'lock');self.assertEqual(d,self.data)
+    def test_aniworld_test_package_identity_and_reproducibility(self):
+        module=b'\0asm\1\0\0\0';source='https://github.com/test/aniworld';commit='b'*40;key=a.test_key(14);lock=(a.ROOT/'Cargo.lock').read_bytes()
+        data,m=a.build_aniworld_test_package(module,source,commit,key,lock)
+        repeated,repeated_manifest=a.build_aniworld_test_package(module,source,commit,key,lock)
+        self.assertEqual((repeated,repeated_manifest),(data,m))
+        root,index,pin=a.aniworld_test_chain(data,m);a.verify_root(root,pin,a.FIXTURE_NOW);a.verify_index(index,root,pin,a.FIXTURE_NOW)
+        verified=a.verify_aniworld_test_chain(data,index,root,pin,a.FIXTURE_NOW)
+        self.assertEqual((verified['extensionId'],verified['providerId'],verified['displayName']),('de.aniworld','aniworld','AniWorld'))
+        self.assertEqual(set(verified['capabilities']),set(a.ANIWORLD_ROLES))
+        self.assertEqual(set(verified['navigationCapabilities']),set(a.ANIWORLD_NAVIGATION))
+        self.assertEqual(verified['allowedHosts'],['aniworld.to'])
+    def test_aniworld_test_chain_is_reproducible(self):
+        with tempfile.TemporaryDirectory() as first,tempfile.TemporaryDirectory() as second:
+            args=(b'\0asm\1\0\0\0','https://github.com/test/aniworld','c'*40)
+            a.write_aniworld_test_chain(Path(first),*args);a.write_aniworld_test_chain(Path(second),*args)
+            left={p.name:p.read_bytes() for p in Path(first).iterdir()};right={p.name:p.read_bytes() for p in Path(second).iterdir()}
+            self.assertEqual(left,right)
+            self.assertIn('aniworld-test.arex',left)
+    def test_aniworld_test_verifier_rejects_extra_host(self):
+        module=b'\0asm\1\0\0\0';source='https://github.com/test/aniworld';commit='d'*40;key=a.test_key(14);lock=(a.ROOT/'Cargo.lock').read_bytes()
+        data,m=a.build_aniworld_test_package(module,source,commit,key,lock);files=a.read_archive(data)
+        m=copy.deepcopy(m);m['allowedHosts'].append('example.org')
+        bad,bad_manifest=a.assemble_package(module,m,a.strict(files['provenance.json']),files['NOTICE'],key)
+        root,index,pin=a.aniworld_test_chain(bad,bad_manifest);a.verify_root(root,pin,a.FIXTURE_NOW);a.verify_index(index,root,pin,a.FIXTURE_NOW)
+        with self.assertRaisesRegex(ValueError,'AniWorld exact host grant'):
+            a.verify_aniworld_test_chain(bad,index,root,pin,a.FIXTURE_NOW)
     def test_duplicate_json(self):
         with self.assertRaises(ValueError):a.strict(b'{"a":1,"a":2}')
     def test_invalid_utf8(self):

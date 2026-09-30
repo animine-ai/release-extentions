@@ -2,8 +2,8 @@
 version = 4
 
 [[package]]
-name = "arex-aniworld-skeleton"
-version = "0.0.0"
+name = "arex-aniworld"
+version = "1.0.0"
 dependencies = ["arex-sdk"]
 
 [[package]]

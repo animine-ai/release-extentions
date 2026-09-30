@@ -56,6 +56,16 @@ jobs:
           bash tools/build_fixture.sh build/clean-a
           bash tools/build_fixture.sh build/clean-b
           cmp build/clean-a/wasm32v1-none/release/arex_fixture.wasm build/clean-b/wasm32v1-none/release/arex_fixture.wasm
+      - name: Two independent clean AniWorld builds
+        working-directory: extension
+        run: |
+          bash tools/build_aniworld.sh build/aniworld-a
+          bash tools/build_aniworld.sh build/aniworld-b
+          cmp build/aniworld-a/wasm32v1-none/release/arex_aniworld.wasm build/aniworld-b/wasm32v1-none/release/arex_aniworld.wasm
+          python3 tools/arex.py test-aniworld-chain --module build/aniworld-a/wasm32v1-none/release/arex_aniworld.wasm --output build/aniworld-chain --source-repository https://github.com/${{ github.repository }} --source-commit ${{ github.sha }}
+          python3 tools/arex.py test-aniworld-chain --module build/aniworld-b/wasm32v1-none/release/arex_aniworld.wasm --output build/aniworld-chain-b --source-repository https://github.com/${{ github.repository }} --source-commit ${{ github.sha }}
+          cmp build/aniworld-chain/aniworld-test.arex build/aniworld-chain-b/aniworld-test.arex
+          python3 tools/arex.py verify-aniworld-chain build/aniworld-chain
       - name: Deterministic test packages and signed chains
         working-directory: extension
         env:
@@ -94,6 +104,7 @@ jobs:
         with:
           name: ep03-fixture-evidence
           path: |
+            extension/build/aniworld-chain/
             extension/build/test-chain/
             extension/build/wire/
             extension/build/report.json

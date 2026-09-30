@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 1,
+  "rightsAndMethod": {
+    "provider": "AniWorld",
+    "sourceMaterials": "All rights reserved by the provider and other applicable rightsholders.",
+    "licenseOrPermissionClaimed": false,
+    "authoringMethod": "Independently authored minimal factual structural reconstructions of observed public page grammar. No provider source HTML, prose, CSS, scripts, images, advertising, trackers, cookies, or third-party code is copied.",
+    "rawCapturesInRepository": false
+  },
+  "rawCaptures": [
+    {
+      "name": "recent",
+      "evidenceFile": "capture-neue-episoden.html (task workspace evidence)",
+      "canonicalUrl": "https://aniworld.to/neue-episoden",
+      "httpStatus": 200,
+      "capturedAt": "2026-09-30T14:57:57.704710+00:00",
+      "capturedAtEvidence": "Raw capture filesystem modification time; the response Date header and a capture sidecar were not retained for this file.",
+      "rawBytes": 205679,
+      "rawSha256": "5c84bc743311bf6122708d821883a4eb77afea35ddbbc6fff185a92b3b1a503c"
+    },
+    {
+      "name": "calendar",
+      "evidenceFile": "capture-animekalender.html (task workspace evidence)",
+      "canonicalUrl": "https://aniworld.to/animekalender",
+      "httpStatus": 200,
+      "capturedAt": "2026-09-30T14:57:49.605219+00:00",
+      "capturedAtEvidence": "Raw capture filesystem modification time; the response Date header and a capture sidecar were not retained for this file.",
+      "rawBytes": 326112,
+      "rawSha256": "fc1ccc660db84ea3b1b63d8a9048516177d4e35e9236476feead1e7a10dad02f"
+    },
+    {
+      "name": "series",
+      "evidenceFile": "capture-series.html (task workspace evidence)",
+      "requestedUrl": "https://aniworld.to/anime/stream/227",
+      "finalUrl": "https://aniworld.to/anime/stream/227",
+      "canonicalUrl": "https://aniworld.to/anime/stream/227",
+      "httpStatus": 200,
+      "capturedAt": "2026-09-30T15:01:12.228070+00:00",
+      "capturedAtEvidence": "capture-metadata.json capturedAt",
+      "rawBytes": 69628,
+      "rawSha256": "e9756e92a2ccd0fefca59b22c201edee31c2ef1eff04a47cf61cb205a5670d4b"
+    },
+    {
+      "name": "episode",
+      "evidenceFile": "capture-episode.html (task workspace evidence)",
+      "requestedUrl": "https://aniworld.to/anime/stream/227/staffel-1/episode-1",
+      "finalUrl": "https://aniworld.to/anime/stream/227/staffel-1/episode-1",
+      "canonicalUrl": "https://aniworld.to/anime/stream/227/staffel-1/episode-1",
+      "httpStatus": 200,
+      "capturedAt": "2026-09-30T15:01:12.291934+00:00",
+      "capturedAtEvidence": "capture-metadata.json capturedAt",
+      "rawBytes": 88180,
+      "rawSha256": "48d4a34951510b4a5a20b85fcaeb9fb8c5db0e00a7856c6298ecb48dc5a5c4b2"
+    },
+    {
+      "name": "postponement",
+      "evidenceFile": "capture-postponement.html (task workspace evidence)",
+      "requestedUrl": "https://aniworld.to/support/frage/anime-verschiebungen",
+      "finalUrl": "https://aniworld.to/support/frage/anime-verschiebungen",
+      "canonicalUrl": "https://aniworld.to/support/frage/anime-verschiebungen",
+      "httpStatus": 200,
+      "capturedAt": "2026-09-30T15:01:12.045951+00:00",
+      "capturedAtEvidence": "capture-metadata.json capturedAt",
+      "rawBytes": 35942,
+      "rawSha256": "3603453a93345aa31225ea9be38407c879e553583a6b8aa749ef6cad3f7cb768"
+    }
+  ],
+  "fixtures": [
+    {
+      "file": "fixtures/recent.html",
+      "sourceCapture": "recent",
+      "sha256": "a67c626c6677cb94739a0f41100cb76710211e15f94b4f76ea9667f7de447753",
+      "shape": "container page with confirmed Neue Episoden h1, then newEpisodeList / rows / row / inner col-md-12; episode link, blue2 episode tag, elementFloatRight date, adjacent flag",
+      "syntheticSeriesKey": "fixture-series",
+      "scenarios": [
+        "DE_SUB",
+        "DE_DUB"
+      ],
+      "bytes": 1515
+    },
+    {
+      "file": "fixtures/calendar.html",
+      "sourceCapture": "calendar",
+      "sha256": "b8e7026129309bf7d8926210aa1dbd73ef111c0000c7f27305f093d68625145d",
+      "shape": "container page with confirmed Animekalender h1, then calendarList section with day heading and seriesListContainer cards; each card groups title, episode, flag, and schedule time",
+      "syntheticSeriesKey": "fixture-series",
+      "scenarios": [
+        "DE_SUB",
+        "DE_DUB"
+      ],
+      "bytes": 1191
+    },
+    {
+      "file": "fixtures/series.html",
+      "sourceCapture": "series",
+      "sha256": "1ba85fa458b123bd1bd545cced79ef89b1c85a0da0ff248fb97f49cf542617dd",
+      "shape": "seriesContentBox / SeriesSection / series-title h1 with seasonEpisodesList table and season1 episode row",
+      "syntheticSeriesKey": "fixture-series",
+      "sourceRedirectOrCanonicalRoute": "https://aniworld.to/anime/stream/227",
+      "bytes": 1301
+    },
+    {
+      "file": "fixtures/episode.html",
+      "sourceCapture": "episode",
+      "sha256": "a3a0bcaf6410d8b37756149814e2ad44cac2ac54faa8045a1a06ca67393e49db",
+      "shape": "series-title h1, hosterSiteTitle data-season/data-episode, hosterSiteVideo changeLanguageBox flags, and li data-lang-key watchEpisode redirect links",
+      "syntheticSeriesKey": "fixture-series",
+      "sourceRedirectOrCanonicalRoute": "https://aniworld.to/anime/stream/227/staffel-1/episode-1",
+      "languageKeys": {
+        "3": "DE_SUB",
+        "2": "EN_SUB"
+      },
+      "redirectsAreSynthetic": true,
+      "bytes": 1378
+    },
+    {
+      "file": "fixtures/postponement.html",
+      "sourceCapture": "postponement",
+      "sha256": "0dff111bda90f1c5e318ee1284dfb9167f0c0f2f7f62457846ab1f65d692db22",
+      "shape": "supportFAQArticle supportFAQHighlight with confirmed Animeverschiebungen heading and br-separated separator/title/episode/sub-dub schedule lines",
+      "providerSeriesKey": null,
+      "scenarioIsSynthetic": true,
+      "note": "The Fixture Series label and schedule facts are synthetic. No provider series identity or link is supplied, so the fact remains unbound.",
+      "bytes": 802,
+      "episodePatterns": [
+        "S01 E12",
+        "Sub",
+        "Dub"
+      ]
+    },
+    {
+      "file": "fixtures/unknown-track.html",
+      "sourceCapture": "recent",
+      "sha256": "5c90be4420d362444c5338fcba8f54407f47337a2ba0525a120dde9ed9dc4243",
+      "bytes": 933,
+      "fixtureKind": "synthetic_negative_test_input",
+      "scenario": "unknown_track",
+      "syntheticDerivedFrom": "fixtures/recent.html",
+      "mutation": "Changed the only flag marker to an unrecognized synthetic language label."
+    },
+    {
+      "file": "fixtures/duplicate-row.html",
+      "sourceCapture": "recent",
+      "sha256": "6d12ff776efa0c084c5ba51b1bbd33e349760026eb73b968b3431fb8e0f292eb",
+      "bytes": 1618,
+      "fixtureKind": "synthetic_negative_test_input",
+      "scenario": "duplicate_row",
+      "syntheticDerivedFrom": "fixtures/recent.html",
+      "mutation": "Repeated one otherwise identical synthetic DE_SUB listing row."
+    },
+    {
+      "file": "fixtures/malformed-date.html",
+      "sourceCapture": "recent",
+      "sha256": "8f9fb48c085ff8a376b5b788d50141e6ecec6fc6a1e7d455814d00f266b6c22a",
+      "bytes": 955,
+      "fixtureKind": "synthetic_negative_test_input",
+      "scenario": "malformed_date",
+      "syntheticDerivedFrom": "fixtures/recent.html",
+      "mutation": "Changed the recent date to impossible 31.02.2026."
+    },
+    {
+      "file": "fixtures/truncated.html",
+      "sourceCapture": "recent",
+      "sha256": "16ee48e0492c1257053bbb3c238969c5bb7fa13a8d6624b0b73dfb307ea648ae",
+      "bytes": 482,
+      "fixtureKind": "synthetic_negative_test_input",
+      "scenario": "truncated_html",
+      "syntheticDerivedFrom": "fixtures/recent.html",
+      "mutation": "Truncated the reconstructed recent document within an open strong element in the first row."
+    },
+    {
+      "file": "fixtures/bot.html",
+      "sourceCapture": "recent",
+      "sha256": "cfef1e663c30f41a462473c51a761a1efa40e6eb31aa6721c5602012c9275280",
+      "bytes": 289,
+      "fixtureKind": "synthetic_negative_test_input",
+      "scenario": "bot_challenge",
+      "syntheticDerivedFrom": "fixtures/recent.html",
+      "mutation": "Replaced the listing body with a generic, independently authored automated-access challenge page; it is not a copied provider or third-party challenge."
+    },
+    {
+      "file": "fixtures/missing-episode.html",
+      "sourceCapture": "episode",
+      "sha256": "4e005f0990c9a4f367d974e69311865a0ce13258218e97d4ba9fc7c820024bcf",
+      "bytes": 882,
+      "fixtureKind": "synthetic_negative_test_input",
+      "scenario": "missing_episode_metadata",
+      "syntheticDerivedFrom": "fixtures/episode.html",
+      "mutation": "Removed the hosterSiteTitle element carrying data-season and data-episode while retaining the episode route, series title, and language rows."
+    }
+  ]
+}

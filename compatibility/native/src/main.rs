@@ -38,7 +38,7 @@ fn main()->Result<()> {
         let bytes=fs::read(&path)?;
         let first=run(&engine,&compiled,export,&bytes)?;let second=run(&engine,&compiled,export,&bytes)?;ensure!(first==second,"nondeterministic fixture output");fs::write(out.join(format!("{name}-output.json")),&first)?;
         let mut samples=Vec::new();for _ in 0..50 {let start=std::time::Instant::now();run(&engine,&compiled,export,&bytes)?;samples.push(start.elapsed().as_micros());}samples.sort();
-        metrics.push(format!("{{\"case\":\"{name}\",\"inputBytes\":{},\"outputBytes\":{},\"p50Micros\":{},\"p95Micros\":{},\"samples\":50,\"memoryBytes\":33554432,\"fuelCeiling\":10000000}}",bytes.len(),first.len(),samples[25],samples[47]));
+        metrics.push(format!("{{\"case\":\"{name}\",\"inputBytes\":{},\"outputBytes\":{},\"p50Micros\":{},\"p95Micros\":{},\"samples\":50,\"memoryBytes\":33554432,\"fuelCeiling\":{}}}",bytes.len(),first.len(),samples[25],samples[47],if export.starts_with("parse_"){20_000_000}else{10_000_000}));
     }
     fs::write(out.join("performance.json"),format!("[{}]",metrics.join(",")))?;
 

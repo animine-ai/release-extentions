@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: animine-ai/Anihyou
-          ref: e4156d51f00dfe0a254f5189ccb374691cbd1b5f
+          ref: b086bf5c43bb47986fb2ab2f8b75d9d31a3e5c67
           path: host
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:
@@ -130,7 +130,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: animine-ai/Anihyou
-          ref: e4156d51f00dfe0a254f5189ccb374691cbd1b5f
+          ref: b086bf5c43bb47986fb2ab2f8b75d9d31a3e5c67
           path: host
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:

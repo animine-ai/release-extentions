@@ -81,14 +81,14 @@
     {
       "file": "fixtures/calendar.html",
       "sourceCapture": "calendar",
-      "sha256": "b8e7026129309bf7d8926210aa1dbd73ef111c0000c7f27305f093d68625145d",
-      "shape": "container page with confirmed Animekalender h1, then calendarList section with day heading and seriesListContainer cards; each card groups title, episode, flag, and schedule time",
+      "sha256": "1d4396e882fbbeb3be80cc5b7a1902e39afc714d1e8be7dd86c12489f99c5def",
+      "shape": "calendarList heading and seriesListContainer cards link to series root; source season/episode in small S01E01 label, flag and schedule time. navigationSeason remains null without an explicit route season.",
       "syntheticSeriesKey": "fixture-series",
       "scenarios": [
         "DE_SUB",
         "DE_DUB"
       ],
-      "bytes": 1191
+      "bytes": 1151
     },
     {
       "file": "fixtures/series.html",
@@ -192,5 +192,65 @@
       "syntheticDerivedFrom": "fixtures/episode.html",
       "mutation": "Removed the hosterSiteTitle element carrying data-season and data-episode while retaining the episode route, series title, and language rows."
     }
-  ]
+  ],
+  "currentValidation": {
+    "validatedAt": "2026-10-01T05:04:54Z",
+    "method": "Independent public HTTP captures outside CI; raw captures remain task evidence only. Fresh response Date and sidecars retained. Historical capture hashes cannot be rehashed because historical raw bytes are unavailable. Current captures supersede those unverified capture bytes for current structure validation.",
+    "captures": [
+      {
+        "name": "calendar",
+        "requestedUrl": "https://aniworld.to/animekalender",
+        "finalUrl": "https://aniworld.to/animekalender",
+        "httpStatus": 200,
+        "capturedAt": "2026-10-01T05:04:54.275471+00:00",
+        "responseDate": "Thu, 01 Oct 2026 05:04:53 GMT",
+        "rawBytes": 304643,
+        "rawSha256": "9dca6a6db02afaaf1896c65e63395574a46754f58a06b553781d8f64d7b3476d"
+      },
+      {
+        "name": "episode",
+        "requestedUrl": "https://aniworld.to/anime/stream/227/staffel-1/episode-1",
+        "finalUrl": "https://aniworld.to/anime/stream/227/staffel-1/episode-1",
+        "httpStatus": 200,
+        "capturedAt": "2026-10-01T05:04:53.878905+00:00",
+        "responseDate": "Thu, 01 Oct 2026 05:04:53 GMT",
+        "rawBytes": 88180,
+        "rawSha256": "e63b1c54b0be0c0742d34fc2b99ae8c5d26fb8ae33d046788a2da8ca75ff7044"
+      },
+      {
+        "name": "postponement",
+        "requestedUrl": "https://aniworld.to/support/frage/anime-verschiebungen",
+        "finalUrl": "https://aniworld.to/support/frage/anime-verschiebungen",
+        "httpStatus": 200,
+        "capturedAt": "2026-10-01T05:04:53.788729+00:00",
+        "responseDate": "Thu, 01 Oct 2026 05:04:53 GMT",
+        "rawBytes": 35942,
+        "rawSha256": "05c491f2efa1754781b143b056c9ba56e402e1118c157bb30641dab2920c2c8d"
+      },
+      {
+        "name": "recent",
+        "requestedUrl": "https://aniworld.to/neue-episoden",
+        "finalUrl": "https://aniworld.to/neue-episoden",
+        "httpStatus": 200,
+        "capturedAt": "2026-10-01T05:04:54.021276+00:00",
+        "responseDate": "Thu, 01 Oct 2026 05:04:53 GMT",
+        "rawBytes": 204273,
+        "rawSha256": "58d7040eed96ad44543a73ec553cab9ddbc837ead69f05dbe78185807e58fa19"
+      },
+      {
+        "name": "series",
+        "requestedUrl": "https://aniworld.to/anime/stream/227",
+        "finalUrl": "https://aniworld.to/anime/stream/227",
+        "httpStatus": 200,
+        "capturedAt": "2026-10-01T05:04:53.801111+00:00",
+        "responseDate": "Thu, 01 Oct 2026 05:04:53 GMT",
+        "rawBytes": 69628,
+        "rawSha256": "ce42348427772efb57e167eaa25ee4191a09301a2c0f7dc8858eeb6bf2811d9b"
+      }
+    ],
+    "structuralResult": "Calendar calendarList, Recent newEpisodeList, supportFAQArticle/supportFAQHighlight, series-title, canonical routes and episode hosterSiteTitle + changeLanguageBox + data-lang-key markers remain present. Observed episode keys 3=DE_SUB, 2=known English. No live CI access.",
+    "repairs": [
+      "Calendar structural reconstruction corrected from invented episode href to observed series-root href. Source coordinates retained; navigation season left unknown."
+    ]
+  }
 }

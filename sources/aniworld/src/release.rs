@@ -61,7 +61,8 @@ fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<P
         if !href.contains("/anime/stream/"){continue;}if calendar&&d.nearest_class(a,"calendarList").is_none(){continue;}
         rows+=1;if rows>512{return Err(());}
         let parsed=(||->Result<Vec<ProviderObservationV1>>{
-            let route=route::parse(href).ok_or(())?;let navigation_season=route.season.ok_or(())?;let number=route.episode.ok_or(())?;
+            let route=route::parse(href).ok_or(())?;
+            if !calendar && (route.season.is_none() || route.episode.is_none()){return Err(());}
             let row=if calendar{a}else{d.nearest_class(d.nodes[a].parent,"col-md-12").ok_or(())?};
             if !calendar&&d.descendants(row).filter(|i|d.nodes[*i].tag=="a").count()!=1{return Err(());}
             let title_node=d.unique(d.descendants(a),|n|if calendar{n.tag=="h3"&&n.class("seriesTitle")}else{n.tag=="strong"})?;
@@ -70,7 +71,12 @@ fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<P
                 let small=d.descendants(a).find(|i|d.nodes[*i].tag=="small").ok_or(())?;
                 let label=d.raw_text(small,256)?;route::label(label.split_whitespace().next().ok_or(())?).ok_or(())?
             }else{let coord=d.unique(d.descendants(a),|n|n.tag=="span"&&n.class("blue2"))?;route::label(&d.text(coord,64)?).ok_or(())?};
-            let(source_season,source_episode)=coordinates;if source_episode!=number{return Err(());}
+            let(source_season,source_episode)=coordinates;
+            if route.episode.as_ref().is_some_and(|number|number!=&source_episode){return Err(());}
+            let number=source_episode;
+            // Calendar series links prove no navigation season. Preserve the explicit
+            // source label without assuming split/cour coordinates are interchangeable.
+            let navigation_season=route.season;
             let(date,time,approximate)=if calendar{
                 let section=d.nearest_class(a,"calendarList").ok_or(())?;
                 let h=d.unique(d.descendants(section),|n|n.tag=="h3"&&!n.class("seriesTitle"))?;let date=route::date(&d.text(h,128)?).ok_or(())?;
@@ -78,7 +84,7 @@ fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<P
                 (date,Some(route::time(&text).ok_or(())?),text.contains('~'))
             }else{let n=d.unique(d.descendants(a),|n|n.class("elementFloatRight"))?;(route::date(&d.text(n,128)?).ok_or(())?,None,false)};
             let mut facts=vec![];for track in page::tracks(d,row)?{
-                let mut o=observation(c,r,Some(route.key.clone()),title.clone(),Some(source_season),Some(navigation_season),Some(number.clone()),track);
+                let mut o=observation(c,r,Some(route.key.clone()),title.clone(),Some(source_season),navigation_season,Some(number.clone()),track);
                 o.source_date_text=Some(date.clone());o.source_time_text=time.clone();o.approximate=approximate;
                 if o.track==ObservationTrack::UNKNOWN{o.diagnostics.push(diagnostic("UNKNOWN_LANGUAGE_TRACK"));}facts.push(o);
             }Ok(facts)

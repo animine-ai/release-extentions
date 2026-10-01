@@ -14,6 +14,7 @@ fn response(role:SourceRole,body:&str)->ResponseEnvelope{
 }
 fn parse_input(c:ExtensionContextV1,responses:Vec<ResponseEnvelope>)->Vec<u8>{encode(&ParseInputV1{schema_version:1,context:c,responses},4*1024*1024).unwrap()}
 fn listing(role:SourceRole,body:&str)->ParseOutputV1{decode(&parse(&parse_input(context(vec![role.clone()]),vec![response(role,body)])),1024*1024).unwrap()}
+fn direct_result(body:&str)->ParseOutputV1{let mut c=context(vec![SourceRole::DIRECT]);c.targets.push(target());decode(&parse(&parse_input(c,vec![response(SourceRole::DIRECT,body)])),1024*1024).unwrap()}
 fn nav(kind:NavigationTargetKind)->NavigationContextV1{let ep=kind==NavigationTargetKind::EPISODE;NavigationContextV1{schema_version:1,extension_id:"de.aniworld".into(),provider_id:"aniworld".into(),observed_at:"2026-09-30T12:00:00Z".into(),target_kind:kind,target_token:"n1".into(),provider_series_key:"fixture-series".into(),provider_route_hint:None,source_season:if ep{Some(1)}else{None},provider_episode:if ep{Some("1".into())}else{None},track:if ep{Some(ObservationTrack::DE_SUB)}else{None}}}
 fn navigate(c:NavigationContextV1,body:&str)->NavigationParseOutputV1{
     let expected=navigation::navigation_url(&c).unwrap_or_else(||"https://aniworld.to/invalid".into());
@@ -42,6 +43,24 @@ fn target()->ExtensionTargetV1{ExtensionTargetV1{target_token:"t1".into(),provid
     assert!(o.observations.is_empty());assert_eq!(o.response_reports[0].outcome,ExtensionReportOutcome::FAILURE);
 }
 #[test]fn direct_requires_actual_track_and_hoster(){let mut c=context(vec![SourceRole::DIRECT]);c.targets.push(target());let o:ParseOutputV1=decode(&parse(&parse_input(c.clone(),vec![response(SourceRole::DIRECT,EPISODE)])),1048576).unwrap();assert_eq!(o.observations.len(),1);assert_eq!(o.observations[0].claim_kind,ObservationClaimKind::DIRECT_AVAILABILITY);c.targets[0].track=ObservationTrack::DE_DUB;let o:ParseOutputV1=decode(&parse(&parse_input(c,vec![response(SourceRole::DIRECT,EPISODE)])),1048576).unwrap();assert!(o.observations.is_empty());}
+#[test]fn contradictory_language_markers_fail_closed_without_poisoning_other_recent_rows(){
+    let body=RECENT.replace("title=\"Episode 1 mit deutschen Untertiteln\"","title=\"Episode 1 mit englischen Untertiteln\"");
+    let o=listing(SourceRole::RECENT,&body);assert_eq!(o.response_reports[0].outcome,ExtensionReportOutcome::PARTIAL);assert_eq!(o.observations.len(),1);assert_eq!(o.observations[0].track,ObservationTrack::DE_DUB);
+    let body=EPISODE.replace("title=\"mit Untertitel Deutsch\"","title=\"mit Untertitel Englisch\"");
+    let o=direct_result(&body);assert!(o.observations.is_empty());assert_eq!(o.response_reports[0].outcome,ExtensionReportOutcome::FAILURE);
+}
+#[test]fn repeated_foreign_data_lang_key_fails_closed(){
+    let body=EPISODE.replace("<img data-lang-key=\"2\" title=\"mit Untertitel Englisch\" alt=\"English subtitles\">","<img data-lang-key=\"2\" title=\"mit Untertitel Englisch\" alt=\"English subtitles\"><img data-lang-key=\"2\" title=\"auf Englisch\" alt=\"English dub\">");
+    let o=direct_result(&body);assert!(o.observations.is_empty());assert_eq!(o.response_reports[0].outcome,ExtensionReportOutcome::FAILURE);
+}
+#[test]fn distinct_foreign_data_lang_keys_do_not_poison_german_direct_track(){
+    let body=EPISODE.replace("<img data-lang-key=\"2\" title=\"mit Untertitel Englisch\" alt=\"English subtitles\">","<img data-lang-key=\"2\" title=\"mit Untertitel Englisch\" alt=\"English subtitles\"><img data-lang-key=\"4\" title=\"auf Französisch\" alt=\"French dub\">");
+    let o=direct_result(&body);assert_eq!(o.response_reports[0].outcome,ExtensionReportOutcome::SUCCESS);assert_eq!(o.observations.len(),1);assert_eq!(o.observations[0].track,ObservationTrack::DE_SUB);
+}
+#[test]fn japanese_german_subtitle_asset_is_not_a_conflicting_foreign_track(){
+    let body=EPISODE.replace("<img data-lang-key=\"3\" title=\"mit Untertitel Deutsch\" alt=\"German subtitles\">","<img src=\"/public/img/japanese-german.svg\" data-lang-key=\"3\" title=\"mit Untertitel Deutsch\" alt=\"Ger-Sub, Deutscher Untertitel, Flagge, Sprache\">");
+    let o=direct_result(&body);assert_eq!(o.response_reports[0].outcome,ExtensionReportOutcome::SUCCESS);assert_eq!(o.observations.len(),1);assert_eq!(o.observations[0].track,ObservationTrack::DE_SUB);
+}
 #[test]fn split_cour_direct_uses_navigation_season_but_preserves_source_season(){let mut c=context(vec![SourceRole::DIRECT]);let mut t=target();t.source_season=Some(1);t.navigation_season=Some(2);t.installment.number=Some("15".into());c.targets.push(t);let plan=release::release_plan(&c).unwrap();assert_eq!(plan[0].url,"https://aniworld.to/anime/stream/fixture-series/staffel-2/episode-15");let body=EPISODE.replace("staffel-1/episode-1","staffel-2/episode-15").replace("data-season=\"1\"","data-season=\"2\"").replace("data-episode=\"1\"","data-episode=\"15\"");let mut r=response(SourceRole::DIRECT,&body);r.final_url=Some(plan[0].url.clone());let o:ParseOutputV1=decode(&parse(&parse_input(c,vec![r])),1048576).unwrap();assert_eq!(o.observations.len(),1);assert_eq!(o.observations[0].source_season,Some(1));assert_eq!(o.observations[0].navigation_season,Some(2));}
 #[test]fn empty_truncated_irrelevant_antibot_fail_closed(){for body in ["","<html><body><h1>Neue Episoden</h1>","<html><body><h1>Shop</h1></body></html>","<html><body><h1>Checking your browser</h1></body></html>"]{let o=listing(SourceRole::RECENT,body);assert!(o.observations.is_empty());assert_eq!(o.response_reports[0].outcome,ExtensionReportOutcome::FAILURE);}}
 #[test]fn malformed_dates_do_not_release(){for date in ["31.02.2026","99.09.2026","30.13.2026","30.09.XXXX"]{let o=listing(SourceRole::RECENT,&RECENT.replace("30.09.2026",date));assert!(o.observations.is_empty());assert_eq!(o.response_reports[0].outcome,ExtensionReportOutcome::PARTIAL);}}
@@ -65,3 +84,13 @@ fn target()->ExtensionTargetV1{ExtensionTargetV1{target_token:"t1".into(),provid
 #[test]fn oversized_logical_list_fails_whole_response(){let row="<div class='col-md-12'><a href='/anime/stream/fixture-series/staffel-1/episode-1'><strong>A</strong><span class='blue2'>S01 E01</span><span class='elementFloatRight'>30.09.2026</span></a><img class='flag' title='auf Deutsch'></div>";let body=format!("<h1>Neue Episoden</h1><div class='newEpisodeList'>{}</div>",row.repeat(513));let o=listing(SourceRole::RECENT,&body);assert!(o.observations.is_empty());assert_eq!(o.response_reports[0].outcome,ExtensionReportOutcome::FAILURE);}
 #[test]fn shuffled_row_fields_and_flags_keep_semantics(){let body=RECENT.replace("class=\"flag\" title=", "title=").replace("alt=\"Deutsche Flagge, German Flag\"", "class=\"flag\" alt=\"Deutsche Flagge, German Flag\"").replace("alt=\"Deutsche Untertitel Flagge, German Subtitle Flag\"", "class=\"flag\" alt=\"Deutsche Untertitel Flagge, German Subtitle Flag\"");assert_eq!(listing(SourceRole::RECENT,&body).observations,listing(SourceRole::RECENT,RECENT).observations);}
 #[test]fn invalid_json_schema_identity_rejected(){for b in [b"{}".as_slice(),b"\xff",b"{\"schemaVersion\":2}",b"{\"schemaVersion\":1,\"schemaVersion\":1}"]{assert_eq!(plan(b),error());assert_eq!(parse(b),error());assert_eq!(nav_plan(b),error());assert_eq!(nav_parse(b),error());}let mut c=context(vec![SourceRole::RECENT]);c.provider_id="other".into();assert!(release::release_plan(&c).is_err());}
+
+#[test]fn calendar_series_root_preserves_forecast_coordinates_without_navigation_guess(){
+    let o=listing(SourceRole::CALENDAR,CALENDAR);
+    assert_eq!(o.observations.len(),2);
+    assert!(o.observations.iter().all(|v|v.claim_kind==ObservationClaimKind::FORECAST&&v.source_season==Some(1)&&v.navigation_season.is_none()&&v.installment.number.as_deref()==Some("1")));
+    let explicit=CALENDAR.replace("href=\"/anime/stream/fixture-series\"","href=\"/anime/stream/fixture-series/staffel-2/episode-1\"");
+    assert!(listing(SourceRole::CALENDAR,&explicit).observations.iter().all(|v|v.source_season==Some(1)&&v.navigation_season==Some(2)));
+    let mismatch=CALENDAR.replace("href=\"/anime/stream/fixture-series\"","href=\"/anime/stream/fixture-series/staffel-2/episode-2\"");
+    assert!(listing(SourceRole::CALENDAR,&mismatch).observations.is_empty());
+}

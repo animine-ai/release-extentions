@@ -123,5 +123,39 @@ release_case('hostile-nodes','RECENT','<i/>'*16400,0,'FAILURE')
 release_case('hostile-large-truncated','RECENT','<main><!--'+'x'*(128*1024),0,'FAILURE')
 release_case('hostile-duplicate-attribute','RECENT', '<h1 class="a" class="b">Neue Episoden</h1>',0,'FAILURE')
 release_case('hostile-logical-rows','RECENT','<h1>Neue Episoden</h1><div class="newEpisodeList">'+('<a href="/anime/stream/a/staffel-1/episode-1"><strong>A</strong></a>'*513)+'</div>',0,'FAILURE')
+# Reconstruct the current capture's attribute and JSON-escape density, as well as
+# bytes/tags/facts. Comment-only padding missed the raw-page fuel regression.
+def capture_density_page(body, target_bytes, target_tags, target_attrs, target_crlfs):
+    class ShapeCounter(HTMLParser):
+        def __init__(self):super().__init__();self.tags=0;self.attrs=0
+        def handle_starttag(self,tag,attrs):self.tags+=1;self.attrs+=len(attrs)
+        def handle_startendtag(self,tag,attrs):self.handle_starttag(tag,attrs)
+    c=ShapeCounter();c.feed(body)
+    tags=target_tags-c.tags;attrs=target_attrs-c.attrs
+    if tags <= 0 or attrs < 0 or attrs > tags*16:raise ValueError('invalid synthetic density budget')
+    noise=''
+    for i in range(tags):
+        n=attrs//(tags-i);attrs-=n
+        noise+='<i'+''.join(f' data-pad-{j}="inert"' for j in range(n))+'>'+'layout'+'</i>\n'
+    body=body.replace('</body>',noise+'</body>')
+    body=body.replace('\n','\r\n')
+    crlfs=target_crlfs-body.count('\r\n')
+    if crlfs < 0:raise ValueError('too many synthetic line endings')
+    padding='\r\n'*crlfs
+    remaining=target_bytes-len(body.encode())-len(padding)-7
+    if remaining<0:raise ValueError('synthetic density exceeds byte target')
+    body=body.replace('</body>','<!--'+padding+'x'*remaining+'--></body>')
+    assert len(body.encode())==target_bytes
+    c=ShapeCounter();c.feed(body)
+    assert (c.tags,c.attrs,body.count('\r\n'))==(target_tags,target_attrs,target_crlfs)
+    return body
+calendar_cards=''.join('''<div class="col-md-15 col-sm-3 col-xs-6"><a href="/anime/stream/synthetic-calendar-{n}"><h3 class="seriesTitle">Synthetic Calendar {n}<span class="paragraph-end"></span></h3><small>S01E01<img class="flag" title="Episode 1 mit deutschem Untertitel" alt="Deutscher Untertitel Flagge, German Subtitle Flag"></small><small>~ 12:00 Uhr</small></a></div>'''.format(n=n) for n in range(95))
+calendar_capture='<html><head><title>Synthetic capture density</title></head><body><h1>Animekalender</h1><section class="calendarList"><h3>Mittwoch, 30.09.2026</h3><div class="seriesListContainer">'+calendar_cards+'</div></section></body></html>'
+calendar_capture=capture_density_page(calendar_capture,326112,2012,3676,2283)
+release_case('calendar-95-rows-capture-attribute-density','CALENDAR',calendar_capture,95,'SUCCESS')
+recent_capture='<html><head><title>Synthetic capture density</title></head><body><h1>Neue Episoden</h1><div class="newEpisodeList">'+''.join(recent_row.format(key=f'synthetic-series-{n:03d}',title=f'Synthetic Series {n:03d}') for n in range(1,151))+'</div></body></html>'
+recent_capture=capture_density_page(recent_capture,205679,1675,2492,2139)
+release_case('recent-150-rows-capture-attribute-density','RECENT',recent_capture,150,'SUCCESS')
+
 (OUT/'cases.json').write_text(json.dumps(cases,indent=2)+'\n')
 print('Wrote',len(cases),'hermetic provider inputs')

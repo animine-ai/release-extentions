@@ -3,7 +3,7 @@ extern crate alloc;
 pub mod abi;
 pub mod bounded;
 pub mod wire;
-use alloc::{string::String,vec::Vec};
+use alloc::{borrow::Cow,string::String,vec::Vec};
 use wire::{Wire,Value,Fields};
 
 #[derive(Clone,Debug,PartialEq,Eq)]
@@ -66,7 +66,7 @@ pub struct InstallmentV1 {
 pub kind: ObservationInstallmentKind,
 pub number: Option<String>,
 }
-impl Wire for InstallmentV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["kind","number"])?;Ok(Self{kind:f.take("kind")?,number:f.take("number")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("kind"),self.kind.to_value()),(String::from("number"),self.number.to_value()),])} }
+impl Wire for InstallmentV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["kind","number"])?;Ok(Self{kind:f.take("kind")?,number:f.take("number")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("kind"),self.kind.to_value()),(Cow::Borrowed("number"),self.number.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct ExtensionTargetV1 {
@@ -78,7 +78,7 @@ pub navigation_season: Option<i32>,
 pub installment: InstallmentV1,
 pub track: ObservationTrack,
 }
-impl Wire for ExtensionTargetV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["targetToken","providerSeriesKey","providerUrl","sourceSeason","navigationSeason","installment","track"])?;Ok(Self{target_token:f.take("targetToken")?,provider_series_key:f.take("providerSeriesKey")?,provider_url:f.take("providerUrl")?,source_season:f.take("sourceSeason")?,navigation_season:f.take("navigationSeason")?,installment:f.take("installment")?,track:f.take("track")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("targetToken"),self.target_token.to_value()),(String::from("providerSeriesKey"),self.provider_series_key.to_value()),(String::from("providerUrl"),self.provider_url.to_value()),(String::from("sourceSeason"),self.source_season.to_value()),(String::from("navigationSeason"),self.navigation_season.to_value()),(String::from("installment"),self.installment.to_value()),(String::from("track"),self.track.to_value()),])} }
+impl Wire for ExtensionTargetV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["targetToken","providerSeriesKey","providerUrl","sourceSeason","navigationSeason","installment","track"])?;Ok(Self{target_token:f.take("targetToken")?,provider_series_key:f.take("providerSeriesKey")?,provider_url:f.take("providerUrl")?,source_season:f.take("sourceSeason")?,navigation_season:f.take("navigationSeason")?,installment:f.take("installment")?,track:f.take("track")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("targetToken"),self.target_token.to_value()),(Cow::Borrowed("providerSeriesKey"),self.provider_series_key.to_value()),(Cow::Borrowed("providerUrl"),self.provider_url.to_value()),(Cow::Borrowed("sourceSeason"),self.source_season.to_value()),(Cow::Borrowed("navigationSeason"),self.navigation_season.to_value()),(Cow::Borrowed("installment"),self.installment.to_value()),(Cow::Borrowed("track"),self.track.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct ExtensionContextV1 {
@@ -88,14 +88,14 @@ pub source_roles: Vec<SourceRole>,
 pub observed_at: String,
 pub targets: Vec<ExtensionTargetV1>,
 }
-impl Wire for ExtensionContextV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["extensionId","providerId","sourceRoles","observedAt","targets"])?;Ok(Self{extension_id:f.take("extensionId")?,provider_id:f.take("providerId")?,source_roles:f.take("sourceRoles")?,observed_at:f.take("observedAt")?,targets:f.take("targets")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("extensionId"),self.extension_id.to_value()),(String::from("providerId"),self.provider_id.to_value()),(String::from("sourceRoles"),self.source_roles.to_value()),(String::from("observedAt"),self.observed_at.to_value()),(String::from("targets"),self.targets.to_value()),])} }
+impl Wire for ExtensionContextV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["extensionId","providerId","sourceRoles","observedAt","targets"])?;Ok(Self{extension_id:f.take("extensionId")?,provider_id:f.take("providerId")?,source_roles:f.take("sourceRoles")?,observed_at:f.take("observedAt")?,targets:f.take("targets")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("extensionId"),self.extension_id.to_value()),(Cow::Borrowed("providerId"),self.provider_id.to_value()),(Cow::Borrowed("sourceRoles"),self.source_roles.to_value()),(Cow::Borrowed("observedAt"),self.observed_at.to_value()),(Cow::Borrowed("targets"),self.targets.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct PlanInputV1 {
 pub schema_version: i32,
 pub context: ExtensionContextV1,
 }
-impl Wire for PlanInputV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","context"])?;Ok(Self{schema_version:f.take("schemaVersion")?,context:f.take("context")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("schemaVersion"),self.schema_version.to_value()),(String::from("context"),self.context.to_value()),])} }
+impl Wire for PlanInputV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","context"])?;Ok(Self{schema_version:f.take("schemaVersion")?,context:f.take("context")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("schemaVersion"),self.schema_version.to_value()),(Cow::Borrowed("context"),self.context.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct RequestSpec {
@@ -105,14 +105,14 @@ pub url: String,
 pub method: ExtensionMethod,
 pub target_token: Option<String>,
 }
-impl Wire for RequestSpec { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["requestId","sourceRole","url","method","targetToken"])?;Ok(Self{request_id:f.take("requestId")?,source_role:f.take("sourceRole")?,url:f.take("url")?,method:f.take("method")?,target_token:f.take("targetToken")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("requestId"),self.request_id.to_value()),(String::from("sourceRole"),self.source_role.to_value()),(String::from("url"),self.url.to_value()),(String::from("method"),self.method.to_value()),(String::from("targetToken"),self.target_token.to_value()),])} }
+impl Wire for RequestSpec { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["requestId","sourceRole","url","method","targetToken"])?;Ok(Self{request_id:f.take("requestId")?,source_role:f.take("sourceRole")?,url:f.take("url")?,method:f.take("method")?,target_token:f.take("targetToken")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("requestId"),self.request_id.to_value()),(Cow::Borrowed("sourceRole"),self.source_role.to_value()),(Cow::Borrowed("url"),self.url.to_value()),(Cow::Borrowed("method"),self.method.to_value()),(Cow::Borrowed("targetToken"),self.target_token.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct PlanOutputV1 {
 pub schema_version: i32,
 pub requests: Vec<RequestSpec>,
 }
-impl Wire for PlanOutputV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","requests"])?;Ok(Self{schema_version:f.take("schemaVersion")?,requests:f.take("requests")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("schemaVersion"),self.schema_version.to_value()),(String::from("requests"),self.requests.to_value()),])} }
+impl Wire for PlanOutputV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","requests"])?;Ok(Self{schema_version:f.take("schemaVersion")?,requests:f.take("requests")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("schemaVersion"),self.schema_version.to_value()),(Cow::Borrowed("requests"),self.requests.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct ResponseEnvelope {
@@ -124,7 +124,7 @@ pub final_url: Option<String>,
 pub body_utf8: Option<String>,
 pub source_hash: Option<String>,
 }
-impl Wire for ResponseEnvelope { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["requestId","sourceRole","status","httpStatus","finalUrl","bodyUtf8","sourceHash"])?;Ok(Self{request_id:f.take("requestId")?,source_role:f.take("sourceRole")?,status:f.take("status")?,http_status:f.take("httpStatus")?,final_url:f.take("finalUrl")?,body_utf8:f.take("bodyUtf8")?,source_hash:f.take("sourceHash")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("requestId"),self.request_id.to_value()),(String::from("sourceRole"),self.source_role.to_value()),(String::from("status"),self.status.to_value()),(String::from("httpStatus"),self.http_status.to_value()),(String::from("finalUrl"),self.final_url.to_value()),(String::from("bodyUtf8"),self.body_utf8.to_value()),(String::from("sourceHash"),self.source_hash.to_value()),])} }
+impl Wire for ResponseEnvelope { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["requestId","sourceRole","status","httpStatus","finalUrl","bodyUtf8","sourceHash"])?;Ok(Self{request_id:f.take("requestId")?,source_role:f.take("sourceRole")?,status:f.take("status")?,http_status:f.take("httpStatus")?,final_url:f.take("finalUrl")?,body_utf8:f.take("bodyUtf8")?,source_hash:f.take("sourceHash")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("requestId"),self.request_id.to_value()),(Cow::Borrowed("sourceRole"),self.source_role.to_value()),(Cow::Borrowed("status"),self.status.to_value()),(Cow::Borrowed("httpStatus"),self.http_status.to_value()),(Cow::Borrowed("finalUrl"),self.final_url.to_value()),(Cow::Borrowed("bodyUtf8"),self.body_utf8.to_value()),(Cow::Borrowed("sourceHash"),self.source_hash.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct ParseInputV1 {
@@ -132,14 +132,14 @@ pub schema_version: i32,
 pub context: ExtensionContextV1,
 pub responses: Vec<ResponseEnvelope>,
 }
-impl Wire for ParseInputV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","context","responses"])?;Ok(Self{schema_version:f.take("schemaVersion")?,context:f.take("context")?,responses:f.take("responses")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("schemaVersion"),self.schema_version.to_value()),(String::from("context"),self.context.to_value()),(String::from("responses"),self.responses.to_value()),])} }
+impl Wire for ParseInputV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","context","responses"])?;Ok(Self{schema_version:f.take("schemaVersion")?,context:f.take("context")?,responses:f.take("responses")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("schemaVersion"),self.schema_version.to_value()),(Cow::Borrowed("context"),self.context.to_value()),(Cow::Borrowed("responses"),self.responses.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct ObservationDiagnosticV1 {
 pub code: String,
 pub message: String,
 }
-impl Wire for ObservationDiagnosticV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["code","message"])?;Ok(Self{code:f.take("code")?,message:f.take("message")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("code"),self.code.to_value()),(String::from("message"),self.message.to_value()),])} }
+impl Wire for ObservationDiagnosticV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["code","message"])?;Ok(Self{code:f.take("code")?,message:f.take("message")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("code"),self.code.to_value()),(Cow::Borrowed("message"),self.message.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct ProviderObservationV1 {
@@ -166,7 +166,7 @@ pub source_url: String,
 pub source_hash: String,
 pub diagnostics: Vec<ObservationDiagnosticV1>,
 }
-impl Wire for ProviderObservationV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","extensionId","providerId","requestId","sourceRole","providerSeriesKey","rawTitle","sourceSeason","navigationSeason","installment","track","claimKind","sourceDateText","sourceTimeText","sourceRawText","parsedTimestamp","approximate","scheduleMarker","correctionMarker","sourceUrl","sourceHash","diagnostics"])?;Ok(Self{schema_version:f.take("schemaVersion")?,extension_id:f.take("extensionId")?,provider_id:f.take("providerId")?,request_id:f.take("requestId")?,source_role:f.take("sourceRole")?,provider_series_key:f.take("providerSeriesKey")?,raw_title:f.take("rawTitle")?,source_season:f.take("sourceSeason")?,navigation_season:f.take("navigationSeason")?,installment:f.take("installment")?,track:f.take("track")?,claim_kind:f.take("claimKind")?,source_date_text:f.take("sourceDateText")?,source_time_text:f.take("sourceTimeText")?,source_raw_text:f.take("sourceRawText")?,parsed_timestamp:f.take("parsedTimestamp")?,approximate:f.take("approximate")?,schedule_marker:f.take("scheduleMarker")?,correction_marker:f.take("correctionMarker")?,source_url:f.take("sourceUrl")?,source_hash:f.take("sourceHash")?,diagnostics:f.take("diagnostics")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("schemaVersion"),self.schema_version.to_value()),(String::from("extensionId"),self.extension_id.to_value()),(String::from("providerId"),self.provider_id.to_value()),(String::from("requestId"),self.request_id.to_value()),(String::from("sourceRole"),self.source_role.to_value()),(String::from("providerSeriesKey"),self.provider_series_key.to_value()),(String::from("rawTitle"),self.raw_title.to_value()),(String::from("sourceSeason"),self.source_season.to_value()),(String::from("navigationSeason"),self.navigation_season.to_value()),(String::from("installment"),self.installment.to_value()),(String::from("track"),self.track.to_value()),(String::from("claimKind"),self.claim_kind.to_value()),(String::from("sourceDateText"),self.source_date_text.to_value()),(String::from("sourceTimeText"),self.source_time_text.to_value()),(String::from("sourceRawText"),self.source_raw_text.to_value()),(String::from("parsedTimestamp"),self.parsed_timestamp.to_value()),(String::from("approximate"),self.approximate.to_value()),(String::from("scheduleMarker"),self.schedule_marker.to_value()),(String::from("correctionMarker"),self.correction_marker.to_value()),(String::from("sourceUrl"),self.source_url.to_value()),(String::from("sourceHash"),self.source_hash.to_value()),(String::from("diagnostics"),self.diagnostics.to_value()),])} }
+impl Wire for ProviderObservationV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","extensionId","providerId","requestId","sourceRole","providerSeriesKey","rawTitle","sourceSeason","navigationSeason","installment","track","claimKind","sourceDateText","sourceTimeText","sourceRawText","parsedTimestamp","approximate","scheduleMarker","correctionMarker","sourceUrl","sourceHash","diagnostics"])?;Ok(Self{schema_version:f.take("schemaVersion")?,extension_id:f.take("extensionId")?,provider_id:f.take("providerId")?,request_id:f.take("requestId")?,source_role:f.take("sourceRole")?,provider_series_key:f.take("providerSeriesKey")?,raw_title:f.take("rawTitle")?,source_season:f.take("sourceSeason")?,navigation_season:f.take("navigationSeason")?,installment:f.take("installment")?,track:f.take("track")?,claim_kind:f.take("claimKind")?,source_date_text:f.take("sourceDateText")?,source_time_text:f.take("sourceTimeText")?,source_raw_text:f.take("sourceRawText")?,parsed_timestamp:f.take("parsedTimestamp")?,approximate:f.take("approximate")?,schedule_marker:f.take("scheduleMarker")?,correction_marker:f.take("correctionMarker")?,source_url:f.take("sourceUrl")?,source_hash:f.take("sourceHash")?,diagnostics:f.take("diagnostics")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("schemaVersion"),self.schema_version.to_value()),(Cow::Borrowed("extensionId"),self.extension_id.to_value()),(Cow::Borrowed("providerId"),self.provider_id.to_value()),(Cow::Borrowed("requestId"),self.request_id.to_value()),(Cow::Borrowed("sourceRole"),self.source_role.to_value()),(Cow::Borrowed("providerSeriesKey"),self.provider_series_key.to_value()),(Cow::Borrowed("rawTitle"),self.raw_title.to_value()),(Cow::Borrowed("sourceSeason"),self.source_season.to_value()),(Cow::Borrowed("navigationSeason"),self.navigation_season.to_value()),(Cow::Borrowed("installment"),self.installment.to_value()),(Cow::Borrowed("track"),self.track.to_value()),(Cow::Borrowed("claimKind"),self.claim_kind.to_value()),(Cow::Borrowed("sourceDateText"),self.source_date_text.to_value()),(Cow::Borrowed("sourceTimeText"),self.source_time_text.to_value()),(Cow::Borrowed("sourceRawText"),self.source_raw_text.to_value()),(Cow::Borrowed("parsedTimestamp"),self.parsed_timestamp.to_value()),(Cow::Borrowed("approximate"),self.approximate.to_value()),(Cow::Borrowed("scheduleMarker"),self.schedule_marker.to_value()),(Cow::Borrowed("correctionMarker"),self.correction_marker.to_value()),(Cow::Borrowed("sourceUrl"),self.source_url.to_value()),(Cow::Borrowed("sourceHash"),self.source_hash.to_value()),(Cow::Borrowed("diagnostics"),self.diagnostics.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct ResponseReportV1 {
@@ -174,7 +174,7 @@ pub request_id: String,
 pub outcome: ExtensionReportOutcome,
 pub diagnostics: Vec<ObservationDiagnosticV1>,
 }
-impl Wire for ResponseReportV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["requestId","outcome","diagnostics"])?;Ok(Self{request_id:f.take("requestId")?,outcome:f.take("outcome")?,diagnostics:f.take("diagnostics")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("requestId"),self.request_id.to_value()),(String::from("outcome"),self.outcome.to_value()),(String::from("diagnostics"),self.diagnostics.to_value()),])} }
+impl Wire for ResponseReportV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["requestId","outcome","diagnostics"])?;Ok(Self{request_id:f.take("requestId")?,outcome:f.take("outcome")?,diagnostics:f.take("diagnostics")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("requestId"),self.request_id.to_value()),(Cow::Borrowed("outcome"),self.outcome.to_value()),(Cow::Borrowed("diagnostics"),self.diagnostics.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct ParseOutputV1 {
@@ -182,7 +182,7 @@ pub schema_version: i32,
 pub observations: Vec<ProviderObservationV1>,
 pub response_reports: Vec<ResponseReportV1>,
 }
-impl Wire for ParseOutputV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","observations","responseReports"])?;Ok(Self{schema_version:f.take("schemaVersion")?,observations:f.take("observations")?,response_reports:f.take("responseReports")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("schemaVersion"),self.schema_version.to_value()),(String::from("observations"),self.observations.to_value()),(String::from("responseReports"),self.response_reports.to_value()),])} }
+impl Wire for ParseOutputV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","observations","responseReports"])?;Ok(Self{schema_version:f.take("schemaVersion")?,observations:f.take("observations")?,response_reports:f.take("responseReports")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("schemaVersion"),self.schema_version.to_value()),(Cow::Borrowed("observations"),self.observations.to_value()),(Cow::Borrowed("responseReports"),self.response_reports.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct NavigationContextV1 {
@@ -198,21 +198,21 @@ pub source_season: Option<i32>,
 pub provider_episode: Option<String>,
 pub track: Option<ObservationTrack>,
 }
-impl Wire for NavigationContextV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","extensionId","providerId","observedAt","targetKind","targetToken","providerSeriesKey","providerRouteHint","sourceSeason","providerEpisode","track"])?;Ok(Self{schema_version:f.take("schemaVersion")?,extension_id:f.take("extensionId")?,provider_id:f.take("providerId")?,observed_at:f.take("observedAt")?,target_kind:f.take("targetKind")?,target_token:f.take("targetToken")?,provider_series_key:f.take("providerSeriesKey")?,provider_route_hint:f.take("providerRouteHint")?,source_season:f.take("sourceSeason")?,provider_episode:f.take("providerEpisode")?,track:f.take("track")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("schemaVersion"),self.schema_version.to_value()),(String::from("extensionId"),self.extension_id.to_value()),(String::from("providerId"),self.provider_id.to_value()),(String::from("observedAt"),self.observed_at.to_value()),(String::from("targetKind"),self.target_kind.to_value()),(String::from("targetToken"),self.target_token.to_value()),(String::from("providerSeriesKey"),self.provider_series_key.to_value()),(String::from("providerRouteHint"),self.provider_route_hint.to_value()),(String::from("sourceSeason"),self.source_season.to_value()),(String::from("providerEpisode"),self.provider_episode.to_value()),(String::from("track"),self.track.to_value()),])} }
+impl Wire for NavigationContextV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","extensionId","providerId","observedAt","targetKind","targetToken","providerSeriesKey","providerRouteHint","sourceSeason","providerEpisode","track"])?;Ok(Self{schema_version:f.take("schemaVersion")?,extension_id:f.take("extensionId")?,provider_id:f.take("providerId")?,observed_at:f.take("observedAt")?,target_kind:f.take("targetKind")?,target_token:f.take("targetToken")?,provider_series_key:f.take("providerSeriesKey")?,provider_route_hint:f.take("providerRouteHint")?,source_season:f.take("sourceSeason")?,provider_episode:f.take("providerEpisode")?,track:f.take("track")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("schemaVersion"),self.schema_version.to_value()),(Cow::Borrowed("extensionId"),self.extension_id.to_value()),(Cow::Borrowed("providerId"),self.provider_id.to_value()),(Cow::Borrowed("observedAt"),self.observed_at.to_value()),(Cow::Borrowed("targetKind"),self.target_kind.to_value()),(Cow::Borrowed("targetToken"),self.target_token.to_value()),(Cow::Borrowed("providerSeriesKey"),self.provider_series_key.to_value()),(Cow::Borrowed("providerRouteHint"),self.provider_route_hint.to_value()),(Cow::Borrowed("sourceSeason"),self.source_season.to_value()),(Cow::Borrowed("providerEpisode"),self.provider_episode.to_value()),(Cow::Borrowed("track"),self.track.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct NavigationRequestSpecV1 {
 pub request_id: String,
 pub url: String,
 }
-impl Wire for NavigationRequestSpecV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["requestId","url"])?;Ok(Self{request_id:f.take("requestId")?,url:f.take("url")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("requestId"),self.request_id.to_value()),(String::from("url"),self.url.to_value()),])} }
+impl Wire for NavigationRequestSpecV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["requestId","url"])?;Ok(Self{request_id:f.take("requestId")?,url:f.take("url")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("requestId"),self.request_id.to_value()),(Cow::Borrowed("url"),self.url.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct NavigationPlanOutputV1 {
 pub schema_version: i32,
 pub requests: Vec<NavigationRequestSpecV1>,
 }
-impl Wire for NavigationPlanOutputV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","requests"])?;Ok(Self{schema_version:f.take("schemaVersion")?,requests:f.take("requests")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("schemaVersion"),self.schema_version.to_value()),(String::from("requests"),self.requests.to_value()),])} }
+impl Wire for NavigationPlanOutputV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","requests"])?;Ok(Self{schema_version:f.take("schemaVersion")?,requests:f.take("requests")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("schemaVersion"),self.schema_version.to_value()),(Cow::Borrowed("requests"),self.requests.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct NavigationResponseEnvelopeV1 {
@@ -223,7 +223,7 @@ pub final_url: Option<String>,
 pub body_utf8: Option<String>,
 pub source_hash: Option<String>,
 }
-impl Wire for NavigationResponseEnvelopeV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["requestId","status","httpStatus","finalUrl","bodyUtf8","sourceHash"])?;Ok(Self{request_id:f.take("requestId")?,status:f.take("status")?,http_status:f.take("httpStatus")?,final_url:f.take("finalUrl")?,body_utf8:f.take("bodyUtf8")?,source_hash:f.take("sourceHash")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("requestId"),self.request_id.to_value()),(String::from("status"),self.status.to_value()),(String::from("httpStatus"),self.http_status.to_value()),(String::from("finalUrl"),self.final_url.to_value()),(String::from("bodyUtf8"),self.body_utf8.to_value()),(String::from("sourceHash"),self.source_hash.to_value()),])} }
+impl Wire for NavigationResponseEnvelopeV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["requestId","status","httpStatus","finalUrl","bodyUtf8","sourceHash"])?;Ok(Self{request_id:f.take("requestId")?,status:f.take("status")?,http_status:f.take("httpStatus")?,final_url:f.take("finalUrl")?,body_utf8:f.take("bodyUtf8")?,source_hash:f.take("sourceHash")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("requestId"),self.request_id.to_value()),(Cow::Borrowed("status"),self.status.to_value()),(Cow::Borrowed("httpStatus"),self.http_status.to_value()),(Cow::Borrowed("finalUrl"),self.final_url.to_value()),(Cow::Borrowed("bodyUtf8"),self.body_utf8.to_value()),(Cow::Borrowed("sourceHash"),self.source_hash.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct ProviderNavigationTargetV1 {
@@ -240,14 +240,14 @@ pub request_id: Option<String>,
 pub source_hash: Option<String>,
 pub diagnostics: Vec<ObservationDiagnosticV1>,
 }
-impl Wire for ProviderNavigationTargetV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","extensionId","providerId","targetKind","providerSeriesKey","sourceSeason","providerEpisode","track","url","requestId","sourceHash","diagnostics"])?;Ok(Self{schema_version:f.take("schemaVersion")?,extension_id:f.take("extensionId")?,provider_id:f.take("providerId")?,target_kind:f.take("targetKind")?,provider_series_key:f.take("providerSeriesKey")?,source_season:f.take("sourceSeason")?,provider_episode:f.take("providerEpisode")?,track:f.take("track")?,url:f.take("url")?,request_id:f.take("requestId")?,source_hash:f.take("sourceHash")?,diagnostics:f.take("diagnostics")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("schemaVersion"),self.schema_version.to_value()),(String::from("extensionId"),self.extension_id.to_value()),(String::from("providerId"),self.provider_id.to_value()),(String::from("targetKind"),self.target_kind.to_value()),(String::from("providerSeriesKey"),self.provider_series_key.to_value()),(String::from("sourceSeason"),self.source_season.to_value()),(String::from("providerEpisode"),self.provider_episode.to_value()),(String::from("track"),self.track.to_value()),(String::from("url"),self.url.to_value()),(String::from("requestId"),self.request_id.to_value()),(String::from("sourceHash"),self.source_hash.to_value()),(String::from("diagnostics"),self.diagnostics.to_value()),])} }
+impl Wire for ProviderNavigationTargetV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","extensionId","providerId","targetKind","providerSeriesKey","sourceSeason","providerEpisode","track","url","requestId","sourceHash","diagnostics"])?;Ok(Self{schema_version:f.take("schemaVersion")?,extension_id:f.take("extensionId")?,provider_id:f.take("providerId")?,target_kind:f.take("targetKind")?,provider_series_key:f.take("providerSeriesKey")?,source_season:f.take("sourceSeason")?,provider_episode:f.take("providerEpisode")?,track:f.take("track")?,url:f.take("url")?,request_id:f.take("requestId")?,source_hash:f.take("sourceHash")?,diagnostics:f.take("diagnostics")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("schemaVersion"),self.schema_version.to_value()),(Cow::Borrowed("extensionId"),self.extension_id.to_value()),(Cow::Borrowed("providerId"),self.provider_id.to_value()),(Cow::Borrowed("targetKind"),self.target_kind.to_value()),(Cow::Borrowed("providerSeriesKey"),self.provider_series_key.to_value()),(Cow::Borrowed("sourceSeason"),self.source_season.to_value()),(Cow::Borrowed("providerEpisode"),self.provider_episode.to_value()),(Cow::Borrowed("track"),self.track.to_value()),(Cow::Borrowed("url"),self.url.to_value()),(Cow::Borrowed("requestId"),self.request_id.to_value()),(Cow::Borrowed("sourceHash"),self.source_hash.to_value()),(Cow::Borrowed("diagnostics"),self.diagnostics.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct NavigationParseOutputV1 {
 pub schema_version: i32,
 pub targets: Vec<ProviderNavigationTargetV1>,
 }
-impl Wire for NavigationParseOutputV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","targets"])?;Ok(Self{schema_version:f.take("schemaVersion")?,targets:f.take("targets")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("schemaVersion"),self.schema_version.to_value()),(String::from("targets"),self.targets.to_value()),])} }
+impl Wire for NavigationParseOutputV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","targets"])?;Ok(Self{schema_version:f.take("schemaVersion")?,targets:f.take("targets")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("schemaVersion"),self.schema_version.to_value()),(Cow::Borrowed("targets"),self.targets.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct NavigationParseInputV1 {
@@ -255,20 +255,20 @@ pub schema_version: i32,
 pub context: NavigationContextV1,
 pub responses: Vec<NavigationResponseEnvelopeV1>,
 }
-impl Wire for NavigationParseInputV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","context","responses"])?;Ok(Self{schema_version:f.take("schemaVersion")?,context:f.take("context")?,responses:f.take("responses")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("schemaVersion"),self.schema_version.to_value()),(String::from("context"),self.context.to_value()),(String::from("responses"),self.responses.to_value()),])} }
+impl Wire for NavigationParseInputV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","context","responses"])?;Ok(Self{schema_version:f.take("schemaVersion")?,context:f.take("context")?,responses:f.take("responses")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("schemaVersion"),self.schema_version.to_value()),(Cow::Borrowed("context"),self.context.to_value()),(Cow::Borrowed("responses"),self.responses.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct GuestError {
 pub code: ExtensionGuestErrorCode,
 }
-impl Wire for GuestError { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["code"])?;Ok(Self{code:f.take("code")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("code"),self.code.to_value()),])} }
+impl Wire for GuestError { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["code"])?;Ok(Self{code:f.take("code")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("code"),self.code.to_value()),])} }
 
 #[derive(Clone,Debug,PartialEq,Eq)]
 pub struct ErrorOutputV1 {
 pub schema_version: i32,
 pub error: GuestError,
 }
-impl Wire for ErrorOutputV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","error"])?;Ok(Self{schema_version:f.take("schemaVersion")?,error:f.take("error")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(String::from("schemaVersion"),self.schema_version.to_value()),(String::from("error"),self.error.to_value()),])} }
+impl Wire for ErrorOutputV1 { fn from_value(v:Value)->Result<Self,bounded::Error>{let mut f=Fields::new(v,&["schemaVersion","error"])?;Ok(Self{schema_version:f.take("schemaVersion")?,error:f.take("error")?,})} fn to_value(&self)->Value{Value::Object(alloc::vec![(Cow::Borrowed("schemaVersion"),self.schema_version.to_value()),(Cow::Borrowed("error"),self.error.to_value()),])} }
 
 pub trait Validate { fn validate(&self) -> Result<(), bounded::Error>; }
 impl Validate for InstallmentV1 { fn validate(&self) -> Result<(), bounded::Error> {

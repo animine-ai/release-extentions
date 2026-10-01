@@ -1,4 +1,4 @@
-use alloc::{string::{String,ToString}};
+use alloc::{borrow::Cow,string::{String,ToString}};
 pub fn join(parts:&[&str])->String{let mut out=String::new();for part in parts{out.push_str(part);}out}
 pub const ORIGIN:&str="https://aniworld.to";
 pub const CALENDAR:&str="https://aniworld.to/animekalender";
@@ -14,22 +14,23 @@ pub fn integer(value:&str,max:i32)->Option<i32>{
 pub fn episode(value:&str)->Option<String>{
     let n=integer(value,9999)?; if n.to_string()!=value{return None;} Some(value.into())
 }
-pub fn url(value:&str)->Option<String> {
+fn path(value:&str)->Option<&str> {
     if value.len()>2048 || value.bytes().any(|b|b<=32||b==127||b"?#%\\".contains(&b)){return None;}
     let path=if let Some(p)=value.strip_prefix(ORIGIN){if !p.starts_with('/'){return None;}p}
         else if value.starts_with('/') && !value.starts_with("//"){value}else{return None;};
     if !path.is_ascii() || path.contains("//") || path.contains("/./") || path.contains("/../"){return None;}
-    Some(join(&[ORIGIN,path]))
+    Some(path)
 }
+pub fn url(value:&str)->Option<String> {Some(join(&[ORIGIN,path(value)?]))}
 pub fn parse(value:&str)->Option<Route>{
-    let absolute=url(value)?;
-    let path=absolute.strip_prefix(ORIGIN)?.strip_prefix("/anime/stream/")?;
-    let parts:alloc::vec::Vec<_>=path.split('/').collect();
-    if !key(parts.first().copied()?) {return None;}
-    match parts.len() {
-        1=>Some(Route{key:parts[0].into(),season:None,episode:None}),
-        2=>{let raw=parts[1].strip_prefix("staffel-")?;let season=integer(raw,9999)?;if season.to_string()!=raw{return None;}Some(Route{key:parts[0].into(),season:Some(season),episode:None})},
-        3=>{let raw=parts[1].strip_prefix("staffel-")?;let season=integer(raw,9999)?;if season.to_string()!=raw{return None;}let e=episode(parts[2].strip_prefix("episode-")?)?;Some(Route{key:parts[0].into(),season:Some(season),episode:Some(e)})},
+    let path=path(value)?.strip_prefix("/anime/stream/")?;
+    let mut parts=path.split('/');let series_key=parts.next()?;
+    if !key(series_key){return None;}
+    let season_part=parts.next();let episode_part=parts.next();if parts.next().is_some(){return None;}
+    match (season_part,episode_part) {
+        (None,None)=>Some(Route{key:series_key.into(),season:None,episode:None}),
+        (Some(raw),None)=>{let raw=raw.strip_prefix("staffel-")?;let season=integer(raw,9999)?;if season.to_string()!=raw{return None;}Some(Route{key:series_key.into(),season:Some(season),episode:None})},
+        (Some(raw),Some(e))=>{let raw=raw.strip_prefix("staffel-")?;let season=integer(raw,9999)?;if season.to_string()!=raw{return None;}let e=episode(e.strip_prefix("episode-")?)?;Some(Route{key:series_key.into(),season:Some(season),episode:Some(e)})},
         _=>None,
     }
 }
@@ -41,7 +42,7 @@ pub fn exact(key:&str,season:i32,episode:&str)->Option<String>{
     let base=series(key,Some(season))?;self::episode(episode)?;Some(join(&[&base,"/episode-",episode]))
 }
 pub fn label(value:&str)->Option<(i32,String)>{
-    let label:String=value.chars().filter(|c|!c.is_whitespace()).collect();
+    let label:Cow<'_,str>=if value.chars().any(char::is_whitespace){Cow::Owned(value.chars().filter(|c|!c.is_whitespace()).collect())}else{Cow::Borrowed(value)};
     let rest=label.strip_prefix('S')?;let (s,e)=rest.split_once('E')?;
     Some((integer(s,9999)?,integer(e,9999)?.to_string()))
 }

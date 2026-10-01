@@ -251,6 +251,87 @@
     "structuralResult": "Calendar calendarList, Recent newEpisodeList, supportFAQArticle/supportFAQHighlight, series-title, canonical routes and episode hosterSiteTitle + changeLanguageBox + data-lang-key markers remain present. Observed episode keys 3=DE_SUB, 2=known English. No live CI access.",
     "repairs": [
       "Calendar structural reconstruction corrected from invented episode href to observed series-root href. Source coordinates retained; navigation season left unknown."
-    ]
+    ],
+    "captureInputMethod": "WASM probes use byte-exact raw UTF-8 bodies, retaining original CRLF and SHA256. Earlier read_text probes normalized CRLF and are superseded for resource measurements.",
+    "captureShapes": {
+      "calendar": {
+        "startTags": 2012,
+        "attributes": 3676,
+        "crlfPairs": 2283,
+        "forecasts": 95
+      },
+      "recent": {
+        "startTags": 1675,
+        "attributes": 2492,
+        "crlfPairs": 2139,
+        "listingHrefs": 150,
+        "episodeHrefs": 143,
+        "coordinateFreeSeriesLinks": 7,
+        "deduplicatedGermanFacts": 88,
+        "deSub": 59,
+        "deDub": 29
+      }
+    },
+    "densityRegression": "Hermetic 95-forecast Calendar and 150-fact Recent vectors now reproduce bytes, tag count, attribute count and CRLF density. No raw provider prose/scripts/assets are included.",
+    "boundedExecution": {
+      "moduleSha256": "949081770da348073be067ff78dd436ac240e30f8cc7d5c981163a5da0a72223",
+      "runtime": "Wasmtime 48.0.3 using unmodified final host build_engine",
+      "bodyEncoding": "Original UTF-8 bytes, CRLF preserved; SHA256 covers raw body",
+      "releaseParseFuelCap": 25000000,
+      "navigationFuelCap": 10000000,
+      "measurements": [
+        {
+          "case": "calendar-release-parse",
+          "inputBytes": 317234,
+          "outputBytes": 62017,
+          "linearMemoryBytes": 17891328,
+          "fuelUsed": 22484055,
+          "fuelCeiling": 25000000
+        },
+        {
+          "case": "direct-release-parse",
+          "inputBytes": 92294,
+          "outputBytes": 738,
+          "linearMemoryBytes": 17891328,
+          "fuelUsed": 5194657,
+          "fuelCeiling": 25000000
+        },
+        {
+          "case": "episode-parse",
+          "inputBytes": 92237,
+          "outputBytes": 395,
+          "linearMemoryBytes": 17891328,
+          "fuelUsed": 5177602,
+          "fuelCeiling": 10000000
+        },
+        {
+          "case": "overview-parse",
+          "inputBytes": 73242,
+          "outputBytes": 376,
+          "linearMemoryBytes": 17891328,
+          "fuelUsed": 4122642,
+          "fuelCeiling": 10000000
+        },
+        {
+          "case": "postponement-release-parse",
+          "inputBytes": 38478,
+          "outputBytes": 9487,
+          "linearMemoryBytes": 17891328,
+          "fuelUsed": 2495121,
+          "fuelCeiling": 25000000
+        },
+        {
+          "case": "recent-release-parse",
+          "inputBytes": 214191,
+          "outputBytes": 57451,
+          "linearMemoryBytes": 17891328,
+          "fuelUsed": 22376314,
+          "fuelCeiling": 25000000
+        }
+      ],
+      "normalWorstCase": "Calendar 95 forecasts, 22484055 / 25000000 fuel, 10.06378% margin",
+      "hermeticWorstCase": "Recent 150 facts with capture attribute/CRLF density, 21530856 / 25000000 fuel, 13.876576% margin",
+      "semanticResult": "Calendar 95 FORECAST; Recent 88 distinct German RELEASE_LISTING facts and PARTIAL for 7 coordinate-free series links; Direct 1 exact DE_SUB availability; 12 unbound postponement corrections remain non-authoritative; overview and episode each 1 exact navigation target."
+    }
   }
 }

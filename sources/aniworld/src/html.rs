@@ -15,20 +15,42 @@ impl Node<'_> {
         self.attrs.iter().find(|(k, _)| k == name).map(|(_, v)| v.as_ref())
     }
     pub fn class(&self, name: &str) -> bool {
-        self.attr("class").is_some_and(|v| v.split_ascii_whitespace().any(|c| c == name))
+        self.attr("class").is_some_and(|v| v==name || v.split_ascii_whitespace().any(|c| c == name))
     }
 }
 pub struct Document<'a> { pub nodes: Vec<Node<'a>> }
 type Result<T> = core::result::Result<T, ()>;
 fn name_byte(b: u8) -> bool { b.is_ascii_alphanumeric() || b"-_:".contains(&b) }
 fn space(b: u8) -> bool { b.is_ascii_whitespace() }
+fn has_visible_text(value:&str)->bool{
+    for b in value.bytes(){if b.is_ascii_whitespace(){continue;}if b.is_ascii(){return true;}return !value.trim().is_empty();}false
+}
 fn lower(value:&str)->Cow<'_,str>{if value.bytes().any(|b|b.is_ascii_uppercase()){Cow::Owned(value.to_ascii_lowercase())}else{Cow::Borrowed(value)}}
 #[inline(always)]
-fn find_byte(bytes:&[u8],mut pos:usize,needle:u8)->Option<usize>{
+pub(crate) fn find_byte(bytes:&[u8],mut pos:usize,needle:u8)->Option<usize>{
     let pattern=(needle as u64)*0x0101010101010101;
+    // SAFETY for each load below: the 32/16/8-byte guard covers every
+    // unaligned word; from_le preserves native and wasm byte order. The
+    // least set mask bit always identifies the first exact matching byte.
+    while bytes.len()-pos>=32{
+        for offset in [0,8,16,24]{
+            let word=u64::from_le(unsafe { core::ptr::read_unaligned(bytes.as_ptr().add(pos+offset).cast::<u64>()) })^pattern;
+            let hit=word.wrapping_sub(0x0101010101010101)&!word&0x8080808080808080;
+            if hit!=0{return Some(pos+offset+(hit.trailing_zeros() as usize/8));}
+        }pos+=32;
+    }
+    while bytes.len()-pos>=16{
+        let a=u64::from_le(unsafe { core::ptr::read_unaligned(bytes.as_ptr().add(pos).cast::<u64>()) })^pattern;
+        let b=u64::from_le(unsafe { core::ptr::read_unaligned(bytes.as_ptr().add(pos+8).cast::<u64>()) })^pattern;
+        let hit=|word:u64|word.wrapping_sub(0x0101010101010101)&!word&0x8080808080808080;
+        let first=hit(a);if first!=0{return Some(pos+(first.trailing_zeros() as usize/8));}
+        let second=hit(b);if second!=0{return Some(pos+8+(second.trailing_zeros() as usize/8));}
+        pos+=16;
+    }
     while bytes.len()-pos>=8{
-        let b=&bytes[pos..pos+8];let word=u64::from_le_bytes([b[0],b[1],b[2],b[3],b[4],b[5],b[6],b[7]])^pattern;
-        if word.wrapping_sub(0x0101010101010101)&!word&0x8080808080808080!=0{break;}pos+=8;
+        let word=u64::from_le(unsafe { core::ptr::read_unaligned(bytes.as_ptr().add(pos).cast::<u64>()) })^pattern;
+        let hit=word.wrapping_sub(0x0101010101010101)&!word&0x8080808080808080;
+        if hit!=0{return Some(pos+(hit.trailing_zeros() as usize/8));}pos+=8;
     }
     while pos<bytes.len(){if bytes[pos]==needle{return Some(pos);}pos+=1;}None
 }
@@ -76,7 +98,7 @@ impl<'a> Document<'a> {
             if bytes[i] != b'<' {
                 let start = i; i=find_byte(bytes,i,b'<').unwrap_or(bytes.len());
                 let text = input.get(start..i).ok_or(())?;
-                if !text.trim().is_empty() { let n=nodes.len(); nodes.push(Node { tag: "#text".into(), attrs: vec![], text, parent: *stack.last().ok_or(())?, end: n+1 }); }
+                if has_visible_text(text) { let n=nodes.len(); nodes.push(Node { tag: "#text".into(), attrs: vec![], text, parent: *stack.last().ok_or(())?, end: n+1 }); }
                 continue;
             }
             if input.get(i..).ok_or(())?.starts_with("<!--") {
@@ -110,7 +132,7 @@ impl<'a> Document<'a> {
                     else { while i<bytes.len() && !space(bytes[i]) && bytes[i]!=b'>' { i+=1; } }
                     if i-v>8192 { return Err(()); }
                     let raw=input.get(v..i).ok_or(())?;
-                    value=if raw.contains('&'){Cow::Owned(entities(raw)?)}else{Cow::Borrowed(raw)}; if quoted.is_some() { i+=1; }
+                    value=if find_byte(raw.as_bytes(),0,b'&').is_some(){Cow::Owned(entities(raw)?)}else{Cow::Borrowed(raw)}; if quoted.is_some() { i+=1; }
                 }
                 attrs.push((key,value));
             }
@@ -152,14 +174,18 @@ impl<'a> Document<'a> {
     pub fn descendants(&self, n: usize) -> core::ops::Range<usize> { n+1..self.nodes[n].end }
     pub fn text(&self, n: usize, cap: usize) -> Result<String> {
         let raw=self.raw_text(n,cap)?;
-        let result=raw.split_whitespace().collect::<Vec<_>>().join(" ");
+        let mut result=String::new();
+        for part in raw.split_whitespace(){if !result.is_empty(){result.push(' ');}result.push_str(part);}
         if result.is_empty() || result.len()>cap { return Err(()); } Ok(result)
     }
     pub fn raw_text(&self,n:usize,cap:usize)->Result<String>{
         let mut out=String::new();
         for i in self.descendants(n) {
             let node=&self.nodes[i];
-            if node.tag=="#text" {out.push_str(&entities(node.text)?);out.push(' ');}
+            if node.tag=="#text" {
+                if find_byte(node.text.as_bytes(),0,b'&').is_some(){out.push_str(&entities(node.text)?);}else{out.push_str(node.text);}
+                out.push(' ');
+            }
             if node.tag=="br" {out.push('\n');}
             if out.len()>cap {return Err(());}
         }
@@ -181,9 +207,11 @@ impl<'a> Document<'a> {
     #[test] fn bounds_and_truncation(){assert!(Document::parse("<a>").is_err());assert!(Document::parse("<a href='x' href='y'></a>").is_err());assert!(Document::parse(&"<div>".repeat(65)).is_err());}
     #[test] fn entities_and_inert_bytes(){let d=Document::parse("<main><script><a href='bad'>fake</a></script><h1>A &amp; B &#039; &#x1f600;</h1></main>").unwrap();assert_eq!(d.text(1,128).unwrap(),"A & B ' 😀");assert!(entities("&#0;").is_err());}
     #[test] fn byte_search_covers_every_boundary_and_utf8(){
-        for n in 0..32{let text=alloc::format!("{}😀<{}", "a".repeat(n),"b".repeat(32));assert_eq!(find_byte(text.as_bytes(),0,b'<'),text.find('<'));assert_eq!(find_byte(text.as_bytes(),0,b'z'),None);}
+        for n in 0..96{let text=alloc::format!("{}😀<{}", "a".repeat(n),"b".repeat(64));assert_eq!(find_byte(text.as_bytes(),0,b'<'),text.find('<'));assert_eq!(find_byte(text.as_bytes(),0,b'z'),None);}
         assert!(Document::parse("<main><!-- -- x --> <h1>A</h1></main>").is_ok());
         assert!(Document::parse("<main><!-- -- x").is_err());
+        assert!(Document::parse("<main>\u{a0}</main>").unwrap().nodes.iter().all(|n|n.tag!="#text"));
+        assert!(Document::parse("<main>😀</main>").unwrap().nodes.iter().any(|n|n.tag=="#text"));
     }
     #[test] fn observed_outer_wrapper_omission_is_narrow(){
         assert!(Document::parse("<html><body><div id='wrapper'><h1>A</h1></body></html>").is_ok());

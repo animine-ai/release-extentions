@@ -1,8 +1,8 @@
 {
   "repository": "animine-ai/Anihyou",
-  "commit": "b086bf5c43bb47986fb2ab2f8b75d9d31a3e5c67",
+  "commit": "f620fa1d91db2027368c7b45fd78582741cf49f5",
   "files": {
-    ".github/workflows/ep02-runtime-android-proof.yml": "de4cb280a1c47850270a305ae38b1c01680e200e582fc5cfec6b10955f0ed48c",
+    ".github/workflows/ep02-runtime-android-proof.yml": "b554ca45787724440bc41e51c69b3909932fe4b8d37cb1bed9aa7b9670fc70e8",
     "tools/ep02-android/build-fixture.sh": "330df83030c789d6e1a9357387201ffee39dfa556f4a619516117367fee10d2f",
     "tools/ep02-android/normalize-fixture-wasm.py": "49d7b0c0d24fc8fed5adc7a73341a6347a9f636751e586c8d65e11cce8cb7a10",
     "tools/ep02-android/fixture/Cargo.toml": "e7cb7e316ba89b3484774c29aa8ec7ae4ea2f6454082a9e762a8cfa86797695f",
@@ -24,7 +24,7 @@
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ArexZipArchiveReader.kt": "71b055ed38b6c4152e89385e8ffb5bbc01eb41281796c48ba9736edb7852bd88"
   },
   "gitBlobSha": {
-    ".github/workflows/ep02-runtime-android-proof.yml": "b20baac69aff7a68b02abed01a5d83e6b6f0c0c0",
+    ".github/workflows/ep02-runtime-android-proof.yml": "98382a2f44c5a744301149d19a97e1b881fbb78f",
     "tools/ep02-android/build-fixture.sh": "9bdb5348f773749e15b2ba3702a3d4d4cafc8a7d",
     "tools/ep02-android/normalize-fixture-wasm.py": "bffcf469d82313329251477b1a3202b31503a0d0",
     "tools/ep02-android/fixture/Cargo.toml": "b9754f54df23348a6fbd59a6a79a361f984ae233",

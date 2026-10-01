@@ -33,6 +33,9 @@ pub fn encode<T: Wire + Validate>(value: &T, cap: usize) -> Result<Vec<u8>, Erro
     let bytes=serialize(&value.to_value());
     ensure(bytes.len()<=cap)?; Ok(bytes)
 }
+pub fn encode_parse_output(value:&crate::ParseOutputV1,cap:usize)->Result<Vec<u8>,Error>{
+    value.validate()?;let bytes=crate::wire::serialize_parse_output(value);ensure(bytes.len()<=cap)?;Ok(bytes)
+}
 #[cfg(test)]
 mod tests {
     extern crate std;

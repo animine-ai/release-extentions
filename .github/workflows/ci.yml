@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: animine-ai/Anihyou
-          ref: b086bf5c43bb47986fb2ab2f8b75d9d31a3e5c67
+          ref: f620fa1d91db2027368c7b45fd78582741cf49f5
           path: host
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:
@@ -130,7 +130,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: animine-ai/Anihyou
-          ref: b086bf5c43bb47986fb2ab2f8b75d9d31a3e5c67
+          ref: f620fa1d91db2027368c7b45fd78582741cf49f5
           path: host
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:
@@ -191,6 +191,8 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot-save -camera-back none -dns-server 127.0.0.1
           script: cd host && bash tools/ep02-android/run-device.sh debug 35
+      - name: Require exact real-guest Android evidence
+        run: python3 extension/tools/verify_aniworld_android.py host/tools/ep02-android/results/android-35-debug/report.json extension/build/aniworld-android/wasm32v1-none/release/arex_aniworld.wasm "$GITHUB_SHA" extension/build/aniworld-inputs/cases.json
       - name: Stop hermetic DNS route
         if: always()
         run: |
@@ -212,6 +214,9 @@ jobs:
           path: |
             host/tools/ep02-android/host-app/build/outputs/apk/debug/
             host/tools/ep02-android/results/ep04-android/
+            host/tools/ep02-android/results/android-35-debug/report.json
+            host/tools/ep02-android/results/android-35-debug/instrumentation.txt
+            host/tools/ep02-android/results/android-35-debug/performance-raw.json
             extension/build/aniworld-inputs/
           if-no-files-found: warn
           retention-days: 30

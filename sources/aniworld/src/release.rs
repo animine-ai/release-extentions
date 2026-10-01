@@ -1,4 +1,4 @@
-use alloc::{string::{String,ToString},vec,vec::Vec};
+use alloc::{borrow::Cow,string::{String,ToString},vec,vec::Vec};
 use arex_sdk::*;
 use bounded::{decode,encode};
 use crate::{error,identity,page,route,html::Document,Result};
@@ -56,9 +56,13 @@ fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<P
     let calendar=r.source_role==SourceRole::CALENDAR;heading(d,if calendar{"Animekalender"}else{"Neue Episoden"})?;
     let list=if calendar{0}else{d.unique(1..d.nodes.len(),|n|n.class("newEpisodeList"))?};
     let mut out=vec![];let mut hashes=vec![];let mut rows=0;let mut partial=false;
+    // A calendar day heading is shared by its episode links. Cache the validated
+    // date, including a failed validation, so every row keeps the same outcome.
+    let mut day_dates:Vec<(usize,Option<String>)>=vec![];
+    let mut track_cache=page::TrackCache::new();
     for a in d.descendants(list){
         if d.nodes[a].tag!="a"{continue;}let Some(href)=d.nodes[a].attr("href")else{continue;};
-        if !href.contains("/anime/stream/"){continue;}if calendar&&d.nearest_class(a,"calendarList").is_none(){continue;}
+        if !href.contains("/anime/stream/"){continue;}let section=if calendar{d.nearest_class(a,"calendarList")}else{None};if calendar&&section.is_none(){continue;}
         rows+=1;if rows>512{return Err(());}
         let parsed=(||->Result<Vec<ProviderObservationV1>>{
             let route=route::parse(href).ok_or(())?;
@@ -78,14 +82,17 @@ fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<P
             // source label without assuming split/cour coordinates are interchangeable.
             let navigation_season=route.season;
             let(date,time,approximate)=if calendar{
-                let section=d.nearest_class(a,"calendarList").ok_or(())?;
-                let h=d.unique(d.descendants(section),|n|n.tag=="h3"&&!n.class("seriesTitle"))?;let date=route::date(&d.text(h,128)?).ok_or(())?;
+                let section=section.ok_or(())?;
+                let index=if let Some(index)=day_dates.iter().position(|(n,_)|*n==section){index}
+                    else{let date=(||{let h=d.unique(d.descendants(section),|n|n.tag=="h3"&&!n.class("seriesTitle")).ok()?;route::date(&d.text(h,128).ok()?)})();day_dates.push((section,date));day_dates.len()-1};
+                let date=day_dates[index].1.as_deref().ok_or(())?;
                 let small=d.descendants(a).filter(|i|d.nodes[*i].tag=="small").nth(1).ok_or(())?;let text=d.text(small,256)?;
-                (date,Some(route::time(&text).ok_or(())?),text.contains('~'))
-            }else{let n=d.unique(d.descendants(a),|n|n.class("elementFloatRight"))?;(route::date(&d.text(n,128)?).ok_or(())?,None,false)};
-            let mut facts=vec![];for track in page::tracks(d,row)?{
+                (Cow::Borrowed(date),Some(route::time(&text).ok_or(())?),text.contains('~'))
+            }else{let n=d.unique(d.descendants(a),|n|n.class("elementFloatRight"))?;(Cow::Owned(route::date(&d.text(n,128)?).ok_or(())?),None,false)};
+            let tracks=if calendar{page::tracks_cached(d,row,&mut track_cache)?}else{page::tracks(d,row)?};
+            let mut facts=vec![];for track in tracks{
                 let mut o=observation(c,r,Some(route.key.clone()),title.clone(),Some(source_season),navigation_season,Some(number.clone()),track);
-                o.source_date_text=Some(date.clone());o.source_time_text=time.clone();o.approximate=approximate;
+                o.source_date_text=Some(date.to_string());o.source_time_text=time.clone();o.approximate=approximate;
                 if o.track==ObservationTrack::UNKNOWN{o.diagnostics.push(diagnostic("UNKNOWN_LANGUAGE_TRACK"));}facts.push(o);
             }Ok(facts)
         })();
@@ -146,6 +153,6 @@ pub fn parse(bytes:&[u8])->Vec<u8>{
             Err(())=>(ExtensionReportOutcome::FAILURE,vec![diagnostic("INVALID_PAGE_OR_PROVENANCE")]),
         };reports.push(ResponseReportV1{request_id:r.request_id.clone(),outcome,diagnostics});
     }
-    let _=abi::diagnostic_text("de.aniworld release parse");let output=encode(&ParseOutputV1{schema_version:1,observations,response_reports:reports},1024*1024).unwrap_or_else(|_|error());
+    let _=abi::diagnostic_text("de.aniworld release parse");let output=bounded::encode_parse_output(&ParseOutputV1{schema_version:1,observations,response_reports:reports},1024*1024).unwrap_or_else(|_|error());
     let _=abi::diagnostic_text("de.aniworld wire encoded");output
 }

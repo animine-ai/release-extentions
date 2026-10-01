@@ -1,6 +1,6 @@
-use alloc::{string::{String,ToString},vec,vec::Vec};
+use alloc::{collections::BTreeMap,string::{String,ToString},vec,vec::Vec};
 use arex_sdk::{ExtensionResponseStatus,ObservationTrack};
-use crate::{html::{Document,Node},route,Result};
+use crate::{html::{find_byte,Document,Node},route,Result};
 pub fn hash(value:Option<&str>)->bool{value.is_some_and(|s|s.len()==64&&s.bytes().all(|b|b.is_ascii_digit()||(b'a'..=b'f').contains(&b)))}
 pub fn page<'a>(status:&ExtensionResponseStatus,http:Option<i32>,url:Option<&str>,body:Option<&'a str>,hash_value:Option<&str>,expected:&str)->Result<Document<'a>>{
     if *status!=ExtensionResponseStatus::OK||!http.is_some_and(|s|(200..300).contains(&s))||url!=Some(expected)||!hash(hash_value){return Err(());}
@@ -12,9 +12,16 @@ pub fn series(d:&Document,expected:&str)->Result<String>{
     let head=d.unique(1..d.nodes.len(),|n|n.class("series-title"))?;
     let h=d.unique(d.descendants(head),|n|n.tag=="h1")?;d.text(h,1024)
 }
+#[derive(Clone)]
 enum TrackClass { German(ObservationTrack), Foreign }
 const FOREIGN_MARKERS:&[&str]=&["english","englisch","french","franz","spanish","spanisch","italian","italien","portugu","polish","poln","russian","russisch","japanese","japanisch","korean","chinese","chines","dutch","niederl","danish","dän","daen","swedish","schwed","norwegian","norweg","finnish","finn","czech","tschech","turkish","türk","tuerk","romanian","rumän","rumaen","hungarian","ungar","greek","griech","originalton"];
-fn known_foreign(s:&str)->bool{FOREIGN_MARKERS.iter().any(|m|s.contains(m))}
+fn has(s:&str,needle:&str)->bool{
+    let bytes=s.as_bytes();let pattern=needle.as_bytes();let mut from=0;
+    while let Some(at)=find_byte(bytes,from,pattern[0]){
+        if bytes.get(at..at+pattern.len())==Some(pattern){return true;}from=at+1;
+    }false
+}
+fn known_foreign(s:&str)->bool{FOREIGN_MARKERS.iter().any(|m|has(s,m))}
 fn nearby_track_cue(s:&str,start:usize,end:usize)->bool{
     let cues=["untertitel","subtitle","flagge","flag","sprache","language","auf","on","originalton"];
     let is_cue=|v:&str|cues.iter().any(|cue|v==*cue||v.starts_with(*cue));
@@ -51,9 +58,10 @@ fn explicit_foreign_marker(n:&Node)->bool{
 fn track(n:&Node)->Result<TrackClass>{
     let mut markers=String::new();
     for name in ["src","data-src","alt","title"]{if let Some(v)=n.attr(name){markers.push_str(v);markers.push(' ');}}
-    let s=markers.to_ascii_lowercase();
-    let sub=s.contains("japanese-german.svg")||((s.contains("untertitel")||s.contains("ger-sub"))&&(s.contains("deutsch")||s.contains("german")||s.contains("ger-sub")||s.contains("de untertitel")));
-    let dub=s.contains("/german.svg")||(!s.contains("untertitel")&&!s.contains("ger-sub")&&(s.contains("auf deutsch")||s.contains("deutsche flagge")||s.contains("german flag")));
+    markers.make_ascii_lowercase();let s=markers;
+    let subtitle=has(&s,"untertitel");let ger_sub=has(&s,"ger-sub");
+    let sub=has(&s,"japanese-german.svg")||((subtitle||ger_sub)&&(has(&s,"deutsch")||has(&s,"german")||ger_sub||has(&s,"de untertitel")));
+    let dub=has(&s,"/german.svg")||(!subtitle&&!ger_sub&&(has(&s,"auf deutsch")||has(&s,"deutsche flagge")||has(&s,"german flag")));
     if (sub&&dub)||((sub||dub)&&explicit_foreign_marker(n)){return Err(());}
     if sub{return Ok(TrackClass::German(ObservationTrack::DE_SUB));}
     if dub{return Ok(TrackClass::German(ObservationTrack::DE_DUB));}
@@ -61,13 +69,41 @@ fn track(n:&Node)->Result<TrackClass>{
     Err(())
 }
 pub fn tracks(d:&Document,n:usize)->Result<Vec<ObservationTrack>>{
+    tracks_impl(d,n,None)
+}
+pub struct TrackCache(BTreeMap<u64,Vec<(usize,TrackClass)>>);
+impl TrackCache { pub fn new()->Self{Self(BTreeMap::new())} }
+fn marker_hash(n:&Node)->u64{
+    let mut h=14695981039346656037u64;
+    for name in ["src","data-src","alt","title"]{
+        let bytes=n.attr(name).unwrap_or("").as_bytes();let mut i=0;
+        h=(h^bytes.len() as u64).wrapping_mul(1099511628211);
+        while bytes.len()-i>=8{
+            // SAFETY: the eight-byte guard covers this unaligned word.
+            let word=u64::from_le(unsafe{core::ptr::read_unaligned(bytes.as_ptr().add(i).cast::<u64>())});
+            h=(h^word).rotate_left(13).wrapping_mul(1099511628211);i+=8;
+        }
+        while i<bytes.len(){h=(h^bytes[i] as u64).wrapping_mul(1099511628211);i+=1;}
+        h=(h^255).wrapping_mul(1099511628211);
+    }h
+}
+fn same_markers(a:&Node,b:&Node)->bool{
+    ["src","data-src","alt","title"].iter().all(|name|a.attr(name)==b.attr(name))
+}
+fn tracks_impl(d:&Document,n:usize,mut cache:Option<&mut TrackCache>)->Result<Vec<ObservationTrack>>{
     let mut out=vec![];let mut count=0;
     for i in d.descendants(n){if d.nodes[i].tag=="img"&&d.nodes[i].class("flag"){
         count+=1;if count>16{return Err(());}
-        if let TrackClass::German(t)=track(&d.nodes[i])?{if !out.contains(&t){out.push(t);}}
+        let classified=if let Some(cache)=cache.as_deref_mut(){
+            let h=marker_hash(&d.nodes[i]);
+            if let Some(prior)=cache.0.get(&h).and_then(|items|items.iter().find(|(j,_)|same_markers(&d.nodes[*j],&d.nodes[i]))){prior.1.clone()}
+            else{let found=track(&d.nodes[i])?;cache.0.entry(h).or_default().push((i,found.clone()));found}
+        }else{track(&d.nodes[i])?};
+        if let TrackClass::German(t)=classified{if !out.contains(&t){out.push(t);}}
     }}
     if count==0{return Err(());}Ok(out)
 }
+pub fn tracks_cached(d:&Document,n:usize,cache:&mut TrackCache)->Result<Vec<ObservationTrack>>{tracks_impl(d,n,Some(cache))}
 pub fn episode(d:&Document,expected:&str,season:i32,number:&str)->Result<(String,Vec<ObservationTrack>)>{
     let title=series(d,expected)?;
     let n=d.unique(1..d.nodes.len(),|n|n.class("hosterSiteTitle"))?;
@@ -93,4 +129,15 @@ pub fn episode(d:&Document,expected:&str,season:i32,number:&str)->Result<(String
         if !available.contains(t){available.push(t.clone());}
     }}
     Ok((title,available))
+}
+#[cfg(test)]mod tests{
+    use super::*;
+    #[test]fn cached_flags_still_reject_conflicting_attributes(){
+        let d=Document::parse("<main><a><img class='flag' src='/public/img/japanese-german.svg' alt='Deutscher Untertitel'></a><a><img class='flag' src='/public/img/japanese-german.svg' alt='Deutscher Untertitel'></a><a><img class='flag' src='/public/img/japanese-german.svg' alt='English Subtitle Flag'></a></main>").unwrap();
+        let rows:Vec<_>=d.nodes.iter().enumerate().filter(|(_,n)|n.tag=="a").map(|(i,_)|i).collect();
+        let mut cache=TrackCache::new();
+        assert_eq!(tracks_cached(&d,rows[0],&mut cache).unwrap(),vec![ObservationTrack::DE_SUB]);
+        assert_eq!(tracks_cached(&d,rows[1],&mut cache).unwrap(),vec![ObservationTrack::DE_SUB]);
+        assert!(tracks_cached(&d,rows[2],&mut cache).is_err());
+    }
 }

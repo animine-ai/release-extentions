@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: animine-ai/Anihyou
-          ref: 07473c174ce27a2b17bd1cc5483984ee2c1c0731
+          ref: 02a4728c70411836884841231562dfddc78141ac
           path: host
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:
@@ -130,7 +130,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: animine-ai/Anihyou
-          ref: 07473c174ce27a2b17bd1cc5483984ee2c1c0731
+          ref: 02a4728c70411836884841231562dfddc78141ac
           path: host
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:
@@ -149,6 +149,8 @@ jobs:
           export PATH="$RUNNER_TEMP/ep04-binaryen/bin:$PATH"
           bash tools/build_aniworld.sh build/aniworld-android
           python3 tools/aniworld_vectors.py build/aniworld-inputs
+          python3 -m pip install -r requirements.txt
+          python3 tools/arex.py test-aniworld-chain --module build/aniworld-android/wasm32v1-none/release/arex_aniworld.wasm --output build/aniworld-chain --source-repository https://github.com/${{ github.repository }} --source-commit ${{ github.sha }}
       - name: Build production Android runtime proof APK
         run: |
           cd host
@@ -163,6 +165,7 @@ jobs:
           cp ../extension/sources/aniworld/fixtures/recent.html tools/ep02-android/host-app/src/main/assets/aniworld-recent.html
           cp ../extension/sources/aniworld/fixtures/episode.html tools/ep02-android/host-app/src/main/assets/aniworld-episode.html
           cp -R ../extension/build/aniworld-inputs tools/ep02-android/host-app/src/main/assets/aniworld-inputs
+          cp -R ../extension/build/aniworld-chain tools/ep02-android/host-app/src/main/assets/aniworld-chain
           printf '%s\n' "$GITHUB_SHA" > tools/ep02-android/host-app/src/main/assets/aniworld-source-commit.txt
           ./gradlew --console=plain --stacktrace :tools:ep02-runtime-app:assembleDebug
       - name: Enable KVM

@@ -42,4 +42,19 @@ assert receipt['receiptGenerationMatchesRequest'] is True
 assert receipt['receiptGenerationId'] == receipt['requestGenerationId']
 assert receipt['runtimeServiceGenerationBefore'] == receipt['runtimeServiceGenerationAfter']
 assert receipt['productionNetworkLedgerUsed'] is False
+canary = checks['ep05Canary']
+assert canary['testTrustOnly'] is True and canary['productionPublication'] is False
+assert canary['moduleDigest'] == proof['moduleDigest']
+assert re.fullmatch('[0-9a-f]{64}', canary['packageDigest'])
+assert canary['observationCount'] == 7 and canary['evidenceCount'] == 5
+assert all(canary[k] is True for k in ['realProductionHttpsTransport', 'dnsBoundTlsSocket',
+    'isolatedRealGuest', 'authorityRequiresExactHostTuple', 'calendarForecastOnly',
+    'calendarWallTimeWithoutInventedTimezone', 'unknownTrackNoAuthority',
+    'unboundPostponementNoAuthority', 'roomShadowCommitted', 'idempotentWorkRetry'])
+assert len(canary['provenance']) == 4
+assert all(p['destination'] == '8.8.8.8' and p['httpStatus'] == 200 for p in canary['provenance'])
+assert len(canary['sourceHealth']) == 4 and all(h['status'] == 'HEALTHY' for h in canary['sourceHealth'])
+assert {n['kind'] for n in canary['navigation']} == {'OVERVIEW', 'EPISODE'}
+assert canary['authorityDecision']['underlyingPhase'] == 'RELEASED'
+assert canary['authorityDecision']['authority'] == 'ANIWORLD'
 print('EP04 exact real-guest Android evidence verified')

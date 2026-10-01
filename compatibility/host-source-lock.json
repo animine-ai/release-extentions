@@ -1,12 +1,12 @@
 {
   "repository": "animine-ai/Anihyou",
-  "commit": "07473c174ce27a2b17bd1cc5483984ee2c1c0731",
+  "commit": "02a4728c70411836884841231562dfddc78141ac",
   "files": {
     ".github/workflows/ep02-runtime-android-proof.yml": "b554ca45787724440bc41e51c69b3909932fe4b8d37cb1bed9aa7b9670fc70e8",
     "tools/ep02-android/build-fixture.sh": "330df83030c789d6e1a9357387201ffee39dfa556f4a619516117367fee10d2f",
     "tools/ep02-android/normalize-fixture-wasm.py": "49d7b0c0d24fc8fed5adc7a73341a6347a9f636751e586c8d65e11cce8cb7a10",
     "tools/ep02-android/fixture/Cargo.toml": "e7cb7e316ba89b3484774c29aa8ec7ae4ea2f6454082a9e762a8cfa86797695f",
-    "tools/ep02-android/host-app/build.gradle.kts": "9a85336aaa8b0432dbb0c7974ebe71ca4a9a6a5856b0d00a8db6d63ea028a13d",
+    "tools/ep02-android/host-app/build.gradle.kts": "4d2801dd572665c85c074d0e8f8c2b699c26395545b2a73bf069cc92f23c2ffa",
     "tools/ep02-android/native/Cargo.toml": "6dda8dae1537e624442c5cf37318d62006b9135001fcbb6a8dfa104f82d9fd56",
     "tools/ep02-android/fixture/src/lib.rs": "cebb44707ea648bc5651b662f4ebd930189b201bb04607301126c709f88d128b",
     "tools/ep02-android/fixture/.cargo/config.toml": "4166e06a007310e698a0c56647e7404d0c3b498b102b9fbd4d13ebf23551e801",
@@ -17,9 +17,9 @@
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/StrictWasmModuleProfileVerifier.kt": "cfaa08aa1f850f1d3e3e00902f045eb7d5c63a35595f1e217e04ad3daef491fd",
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionTrust.kt": "97288436cf34801598930dac788d6fd08a8cdd00a294d19f2405657788969da9",
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionPackageVerifier.kt": "be6025a137f0e4a4e1c47687bc7f21fbac2fa0ffc9e0283ab88c4d133e8e4abe",
-    "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionInstallStore.kt": "2f45826ed14b609a3957e973f195b3ea0815992520f0196a91f5837fa065a4e3",
+    "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionInstallStore.kt": "e6066624f09d19e5262adc7a74ddfec7c85494a512c548a73ba2ca92ce174b7d",
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/NavigationWireCodecV1.kt": "52218b67dfe96d335a3b7b9421fe29e4bf8c9227550359bb1b78043ec94af366",
-    "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionHostCoordinator.kt": "44e825104bad8b420fa8b78d3a263de73333d7c1c765aac6da68e51ec7f06151",
+    "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionHostCoordinator.kt": "ef17e7ce00973ecb41fa373773c5f13524c060dae30778b421cc4e50d1bc572c",
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ExtensionWireCodec.kt": "679866da474e7dfa40758316616e976404823834b93f6204651eda6b03de3c29",
     "private/release-data/src/main/kotlin/com/axiel7/anihyou/release/data/extension/ArexZipArchiveReader.kt": "71b055ed38b6c4152e89385e8ffb5bbc01eb41281796c48ba9736edb7852bd88"
   },

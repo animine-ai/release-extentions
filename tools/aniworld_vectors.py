@@ -49,10 +49,16 @@ for prefix,role,count in [('calendar','CALENDAR',2),('recent','RECENT',2),('post
     release_case(prefix,role,(FIX/(prefix if prefix!='direct' else 'episode')).with_suffix('.html').read_text(),count,'SUCCESS')
 for fixture,count,outcome in [('bot',0,'FAILURE'),('truncated',0,'FAILURE'),('malformed-date',0,'PARTIAL'),('duplicate-row',2,'SUCCESS'),('unknown-track',0,'PARTIAL')]:
     release_case(fixture,'RECENT',(FIX/(fixture+'.html')).read_text(),count,outcome)
+release_case('challenge','RECENT',(FIX/'bot.html').read_text(),0,'FAILURE')
 foreign=(FIX/'recent.html').read_text().replace('Episode 1 mit deutschen Untertiteln','Episode 1 auf Englisch').replace('Deutsche Untertitel Flagge, German Subtitle Flag','Englische Flagge, English Flag')
 release_case('known-foreign-track','RECENT',foreign,1,'SUCCESS')
 conflicting_recent=(FIX/'recent.html').read_text().replace('title="Episode 1 mit deutschen Untertiteln"','title="Episode 1 mit englischen Untertiteln"')
 release_case('conflicting-language-marker-recent','RECENT',conflicting_recent,1,'PARTIAL')
+# Calendar malformed rows remain row-local: a bad time keeps the other track's
+# valid forecast, while an impossible day makes all rows partial and non-factual.
+calendar=(FIX/'calendar.html').read_text()
+release_case('calendar-malformed-time-partial','CALENDAR',calendar.replace('~ 12:00 Uhr','~ 25:99 Uhr'),1,'PARTIAL')
+release_case('calendar-invalid-day-partial','CALENDAR',calendar.replace('30.09.2026','31.02.2026'),0,'PARTIAL')
 episode=(FIX/'episode.html').read_text()
 conflicting_episode=episode.replace('title="mit Untertitel Deutsch"','title="mit Untertitel Englisch"')
 release_case('conflicting-language-marker-direct','DIRECT',conflicting_episode,0,'FAILURE')
@@ -71,6 +77,12 @@ release_case('empty','RECENT','',0,'FAILURE')
 # A page that advertises a stream but lacks hosterSiteTitle coordinates has no
 # structural identity proof, so direct-release parsing must fail closed.
 release_case('missing-direct','DIRECT',(FIX/'missing-episode.html').read_text(),0,'FAILURE')
+def direct_track_case(name,body,track,count,outcome):
+    c=copy.deepcopy(context);c['sourceRoles']=['DIRECT'];c['targets'][0]['track']=track
+    put(name+'-release-parse',{'schemaVersion':1,'context':c,'responses':[response('DIRECT',body)]},count=count,outcomes=[outcome])
+direct_track_case('direct-missing-track',(FIX/'episode.html').read_text(),'DE_DUB',0,'SUCCESS')
+coordinate_mismatch=(FIX/'episode.html').read_text().replace('data-episode="1"','data-episode="2"')
+release_case('direct-coordinate-mismatch','DIRECT',coordinate_mismatch,0,'FAILURE')
 split_context=copy.deepcopy(context);split_context['sourceRoles']=['DIRECT'];split_context['targets'][0]['sourceSeason']=1;split_context['targets'][0]['navigationSeason']=2;split_context['targets'][0]['installment']['number']='15'
 split_body=(FIX/'episode.html').read_text().replace('staffel-1/episode-1','staffel-2/episode-15').replace('data-season="1"','data-season="2"').replace('data-episode="1"','data-episode="15"')
 split_url=ORIGIN+'/anime/stream/fixture-series/staffel-2/episode-15'

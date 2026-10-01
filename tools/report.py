@@ -2,7 +2,7 @@ import hashlib,json,os
 from pathlib import Path
 root=Path(__file__).resolve().parents[1];build=root/'build'
 lock=json.loads((root/'compatibility'/'host-source-lock.json').read_text())
-folders=['test-chain','aniworld-chain','wire']
+folders=['test-chain','aniworld-chain','wire','aniworld-inputs','aniworld-wire']
 files=[p for folder in folders for p in (build/folder).rglob('*') if p.is_file()]
 digests={str(p.relative_to(build)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
 aniworld_manifest=json.loads((build/'aniworld-chain'/'manifest.json').read_text())

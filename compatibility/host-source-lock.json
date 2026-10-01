@@ -1,6 +1,6 @@
 {
   "repository": "animine-ai/Anihyou",
-  "commit": "57a70bee45d617fac869ea5c62299f53952a9358",
+  "commit": "be3334ac16dbd1dbd3c89353e830f5955a7392df",
   "files": {
     ".github/workflows/ep02-runtime-android-proof.yml": "b554ca45787724440bc41e51c69b3909932fe4b8d37cb1bed9aa7b9670fc70e8",
     "tools/ep02-android/build-fixture.sh": "330df83030c789d6e1a9357387201ffee39dfa556f4a619516117367fee10d2f",

@@ -5,8 +5,9 @@ Usage: python3 tools/differential_vectors.py OUTPUT_DIR FIXTURE_WASM
 Writes hostile strict-JSON documents, display names, ZIP mutations and publisher-scope cases together with the
 verdict of this repository's verifier, plus yank/revoke index sequences for the install-store characterization test.
 compatibility/host/.../DifferentialParityTest.kt feeds the same bytes to the unmodified host code and asserts that
-both sides agree, except for the explicitly listed benign differences. HostLifecycleCharacterizationTest pins the
-one-way yank/revoke behaviour documented in docs/repository-contract.md.
+both sides agree, except for the explicitly listed benign differences. HostYankRevokeLifecycleTest pins the yank and
+revoke contract documented in docs/repository-contract.md (D1: a yank is liftable and keeps a healthy package running,
+a revocation is permanent).
 No network, no production keys: every key is a public test seed.
 """
 import base64, copy, io, json, shutil, stat, struct, sys, zipfile

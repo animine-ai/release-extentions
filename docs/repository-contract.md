@@ -67,10 +67,14 @@ Overflowing any of these rejects the whole document. There is no truncation, so 
    a scope ends before the index does. Evidence: `scopes.json` cases in `DifferentialParityTest`.
 2. **Index validity is at most 7 days** (`issuedAt` may be up to 10 minutes in the future). A repository that does
    not re-sign before expiry stops delivering updates; already installed packages stay usable.
-3. **`yanked` and `revoked` are one-way on the device.** A digest that was ever seen as revoked or yanked is kept in
-   device state. Re-publishing the same digest as healthy later does not restore it. Cut a new release with a higher
-   `releaseSequence` instead. Pinned by `HostLifecycleCharacterizationTest`: if the host ever changes this, that test fails
-   and this document must change with it.
+3. **`yanked` and `revoked` are different on the device (planner decision D1).**
+   - `revoked` is permanent. A revoked digest never runs again after a restart, a higher index, a reinstall or a rollback,
+     and a later index that drops the flag does not undo it. Root `revokedDigests` and `revokedKeys` only grow.
+   - `yanked` withdraws a release from distribution. It cannot be installed, updated to or chosen as a rollback target.
+     A package that is already installed and healthy keeps running while every other trust rule still holds. A strictly
+     higher authenticated index may lift a pure yank; a replayed, expired or equivocating index cannot.
+   - Revocation wins over a yank, quarantine from a failed smoke check or damaged content is never lifted by an unyank,
+     and quarantine entries written before this rule stay as they are. Pinned by `HostYankRevokeLifecycleTest`.
 4. **Revocation lives in two places.** The index entry flag and the root `revokedDigests`/`revokedKeys`. The root list is
    append-only across rotations; plan the 256-digest cap.
 5. **Release sequence is per extension and strictly increasing**; entries are ordered by `(extensionId, releaseSequence)`.

@@ -77,6 +77,7 @@ jobs:
           cmp build/test-chain/fixture.arex build/test-chain-b/fixture.arex
           python3 fixtures/trust/generate.py build/test-chain
           python3 tools/arex.py verify-chain build/test-chain
+          python3 tools/arex.py lint-repository --url https://packages.example.org/extensions --root build/test-chain/root.json --index build/test-chain/index.json --pin build/test-chain/test-pin.json --now 2026-09-29T12:00:00Z
       - name: Original production native feature validation and ABI execution
         # Filled from the immutable host source before compiling the cached harness.
         working-directory: extension
@@ -86,6 +87,9 @@ jobs:
           python3 tools/check_wire.py
           python3 tools/aniworld_vectors.py
           cargo +1.95.0 run --locked --release --manifest-path compatibility/native/Cargo.toml -- build/aniworld-a/wasm32v1-none/release/arex_aniworld.wasm build/aniworld-inputs build/aniworld-wire
+      - name: Differential vectors for publisher tool versus original host verifiers
+        working-directory: extension
+        run: python3 tools/differential_vectors.py build/diff build/clean-a/wasm32v1-none/release/arex_fixture.wasm
       - name: Original Kotlin package, root, index, install and wire verifiers
         working-directory: extension
         run: gradle -p compatibility/host --console=plain test

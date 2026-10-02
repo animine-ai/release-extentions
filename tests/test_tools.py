@@ -133,4 +133,49 @@ def rotation(root):
     s['keys']=[{'keyId':a.key_id(k),'publicKey':a.b64(a.public(k))} for k in keys]
     s['roles']['root']['keyIds']=[a.key_id(a.test_key(i)) for i in [5,6,7]]
     return a.envelope(s,[a.test_key(i) for i in [0,1,5,6]],'ROOT')
+class RepositoryLintTest(unittest.TestCase):
+    URL='https://packages.example.org/extensions'
+    def setUp(self):
+        data,m=a.build_package(b'\0asm\1\0\0\0','https://github.com/test/fixture','a'*40,a.test_key(4),b'lock')
+        self.root,self.index,self.pin=a.fixture_chain(data,m)
+    def lint(self,url=None,root=None,index=None,pin=None):
+        return a.lint_repository(url or self.URL,a.jcs(root or self.root),a.jcs(index or self.index),pin or self.pin,a.FIXTURE_NOW)
+    def test_clean_repository_has_no_findings(self):
+        self.assertEqual(self.lint(),([],[]))
+    def test_url_rules_match_app_registry(self):
+        origins={'https://packages.example.org'}
+        self.assertEqual(a.normalize_repository_url(' https://Packages.Example.org:443/a/b/ ',origins),'https://packages.example.org/a/b')
+        for bad in ['http://packages.example.org/x','https://user@packages.example.org/x','https://packages.example.org/x?y=1',
+                    'https://packages.example.org/x#f','https://packages.example.org:8443/x','https://packages.example.org/a//b',
+                    'https://packages.example.org/a/../b','https://packages.example.org/%41','https://packages.example.org\\x',
+                    'https://127.0.0.1/x','https://localhost/x','https://other.example.org/x','https://packages.example.org/'+'a'*2100]:
+            with self.assertRaises(ValueError,msg=bad):a.normalize_repository_url(bad,origins)
+    def test_oversized_documents_are_errors(self):
+        root=copy.deepcopy(self.root);root['signed']['padding']='x'*70000
+        errors,_=self.lint(root=root)
+        self.assertTrue(any('root.json' in e and 'fetches at most' in e for e in errors))
+        index=copy.deepcopy(self.index);index['signed']['padding']='x'*270000
+        errors,_=self.lint(index=index)
+        self.assertTrue(any('index.json' in e and 'fetches at most' in e for e in errors))
+    def test_origin_must_be_pinned(self):
+        errors,_=self.lint(url='https://elsewhere.example.org/extensions')
+        self.assertTrue(any('independently authenticated' in e for e in errors))
+    def test_scope_expiring_before_index_warns_about_whole_catalog(self):
+        signed=copy.deepcopy(self.root['signed']);signed['publishers'][0]['expiresAt']='2026-10-01T00:00:00Z'
+        root=a.envelope(signed,[a.test_key(0),a.test_key(1)],'ROOT');pin=dict(self.pin,initialRootSha256=a.sha(a.jcs(signed)))
+        errors,warnings=self.lint(root=root,pin=pin)
+        self.assertEqual(errors,[]);self.assertTrue(any('WHOLE index' in w for w in warnings),warnings)
+    def test_index_close_to_expiry_warns(self):
+        signed=copy.deepcopy(self.index['signed']);signed['issuedAt']='2026-09-27T12:00:00Z';signed['expiresAt']='2026-09-30T00:00:00Z'
+        index=a.envelope(signed,[a.test_key(3)],'INDEX')
+        errors,warnings=self.lint(index=index)
+        self.assertEqual(errors,[]);self.assertTrue(any('index expires in' in w for w in warnings),warnings)
+    def test_expired_index_is_an_error(self):
+        signed=copy.deepcopy(self.index['signed']);signed['issuedAt']='2026-09-20T12:00:00Z';signed['expiresAt']='2026-09-27T12:00:00Z'
+        index=a.envelope(signed,[a.test_key(3)],'INDEX')
+        errors,_=self.lint(index=index)
+        self.assertTrue(any(e.startswith('index:') for e in errors),errors)
+    def test_array_entry_limit_matches_host_codec(self):
+        with self.assertRaises(ValueError):a.strict(b'{"a":['+b','.join([b'1']*4097)+b']}')
+        a.strict(b'{"a":['+b','.join([b'1']*4096)+b']}')
 if __name__=='__main__':unittest.main()

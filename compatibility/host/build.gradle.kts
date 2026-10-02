@@ -12,5 +12,6 @@ tasks.test {
     systemProperty("arex.artifacts", file("../../build/test-chain").absolutePath)
     systemProperty("arex.wire", file("../../build/wire").absolutePath)
     systemProperty("arex.inputs", file("../../fixtures/wire").absolutePath)
+    systemProperty("arex.diff", file("../../build/diff").absolutePath)
     testLogging { events("passed","skipped","failed") }
 }

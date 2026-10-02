@@ -1,8 +1,8 @@
 {
   "repository": "animine-ai/Anihyou",
-  "commit": "9298a01d2579fed28f0257451dffea2174c8f6cc",
+  "commit": "18d80c3ab8fb7d7ecbf9e237cff85e8796deca05",
   "files": {
-    ".github/workflows/ep02-runtime-android-proof.yml": "d8e0a50ac3ded0ef5cd7a8947beeaad30b29a4f920e173be638c6136aed6ffae",
+    ".github/workflows/ep02-runtime-android-proof.yml": "06cd2e1eafc2e145f85a0d695356f645bafb284dd10ba9fb8cc2e1a6ef4ad1e6",
     "tools/ep02-android/build-fixture.sh": "330df83030c789d6e1a9357387201ffee39dfa556f4a619516117367fee10d2f",
     "tools/ep02-android/normalize-fixture-wasm.py": "49d7b0c0d24fc8fed5adc7a73341a6347a9f636751e586c8d65e11cce8cb7a10",
     "tools/ep02-android/fixture/Cargo.toml": "e7cb7e316ba89b3484774c29aa8ec7ae4ea2f6454082a9e762a8cfa86797695f",
@@ -25,7 +25,7 @@
     "private/release-core/src/main/kotlin/com/axiel7/anihyou/release/core/source/ExtensionUpdate.kt": "e794b6cf6fefdb631329ade8a9b132ea96c1d1a35b854724249342dd51cd4166"
   },
   "gitBlobSha": {
-    ".github/workflows/ep02-runtime-android-proof.yml": "35f97aa0d41b9ce6f627fb1ff3da804043c56528",
+    ".github/workflows/ep02-runtime-android-proof.yml": "b19bec1dda4b499b59df7abe55679fa3d63b895c",
     "tools/ep02-android/build-fixture.sh": "9bdb5348f773749e15b2ba3702a3d4d4cafc8a7d",
     "tools/ep02-android/normalize-fixture-wasm.py": "bffcf469d82313329251477b1a3202b31503a0d0",
     "tools/ep02-android/fixture/Cargo.toml": "b9754f54df23348a6fbd59a6a79a361f984ae233",

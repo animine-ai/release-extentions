@@ -1,7 +1,9 @@
 # Release Extensions, ABI v1
 
 Versioned SDK, deterministic WASM fixtures and offline distribution tools for the
-accepted AniHyou host at `c343b4bca3a7133330287e09de861729faf67273`.
+AniHyou host revision pinned in `compatibility/host-source-lock.json` (the lock file, not this
+README, is the source of truth for the host commit). What the host requires of a hosted
+repository is summarised in [docs/repository-contract.md](docs/repository-contract.md).
 
 ## User-added sources
 

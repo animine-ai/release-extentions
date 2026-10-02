@@ -47,6 +47,7 @@ def safe_tree(value,depth=0):
     if type(value) is str:
         value.encode('utf-8','strict');return
     if type(value) is list:
+        check(len(value)<=4096,'array entry limit')  # host ExtensionWireCodec cap; every schema array is smaller
         for v in value:safe_tree(v,depth+1)
         return
     if type(value) is dict:
@@ -157,6 +158,41 @@ def verify_index(env,root,pin,now,last=None):
         check(any(p['publisherId']==e['publisherId'] and p['extensionId']==e['extensionId'] and p['providerId']==e['providerId'] and p['keyId']==e['keyId'] and time(p['notBefore'])<=now<time(p['expiresAt']) for p in r['publishers']),'publisher scope missing')
         order.append((e['extensionId'],e['releaseSequence']))
     check(all(a<b for a,b in zip(order,order[1:])),'catalog order/duplicate release');return env
+HOST_NAME=re.compile(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+')
+ROOT_FETCH_CAP,INDEX_FETCH_CAP=65536,262144
+def normalize_repository_url(value,origins):
+    """Mirror of the app's repository address rules (NormalizedExtensionSource.parse plus the transport origin check)."""
+    text=value.strip();check(1<=len(text)<=2048 and all(0x21<=ord(c)<=0x7e for c in text) and '\\' not in text and '%' not in text,'ambiguous or oversized repository URL')
+    check('?' not in text and '#' not in text,'repository URL must not carry a query or fragment')
+    u=urlsplit(text);host=(u.hostname or '').lower()
+    check(u.scheme.lower()=='https' and u.username is None and u.password is None,'repository URL must be plain https without credentials')
+    check(u.port in (None,443),'repository port')
+    check(len(host)<=253 and HOST_NAME.fullmatch(host) is not None and not all(c.isdigit() or c=='.' for c in host),'repository host must be a canonical DNS hostname')
+    check(all(part not in ('.','..') for part in u.path.split('/')) and '//' not in u.path,'repository path')
+    origin='https://'+host;check(origin in origins,'repository origin is not independently authenticated by the app pin')
+    return origin+u.path.rstrip('/')
+def lint_repository(url,root_bytes,index_bytes,pin,now):
+    """Publisher-side hosting lint. Returns (errors,warnings); errors are conditions the original host rejects."""
+    errors,warnings=[],[]
+    def run(label,fn):
+        try:return fn()
+        except (ValueError,KeyError,TypeError,UnicodeError) as exc:errors.append(label+': '+str(exc))
+    run('url',lambda:normalize_repository_url(url,set(pin['distributionOrigins'])))
+    if len(root_bytes)>ROOT_FETCH_CAP:errors.append('root.json is %d bytes; the app fetches at most %d'%(len(root_bytes),ROOT_FETCH_CAP))
+    if len(index_bytes)>INDEX_FETCH_CAP:errors.append('index.json is %d bytes; the app fetches at most %d'%(len(index_bytes),INDEX_FETCH_CAP))
+    root=run('root',lambda:strict(root_bytes,ROOT_FETCH_CAP));index=run('index',lambda:strict(index_bytes,INDEX_FETCH_CAP))
+    if root is None or index is None:return errors,warnings
+    if run('root',lambda:verify_root(root,pin,now)) is None or run('index',lambda:verify_index(index,root,pin,now)) is None:return errors,warnings
+    r,i=root['signed'],index['signed']
+    if len(index_bytes)*5>INDEX_FETCH_CAP*4:warnings.append('index.json uses %d of %d fetch bytes; one overflow fails the whole catalog closed'%(len(index_bytes),INDEX_FETCH_CAP))
+    if len(i['entries'])*5>256*4:warnings.append('%d of 256 index entries used'%len(i['entries']))
+    left=time(i['expiresAt'])-now
+    if left<timedelta(hours=48):warnings.append('index expires in %.1f hours; devices stop accepting new data after expiry'%(left.total_seconds()/3600))
+    if time(r['expiresAt'])-now<timedelta(days=30):warnings.append('root expires in under 30 days')
+    for p in r['publishers']:
+        if time(p['expiresAt'])<time(i['expiresAt']):
+            warnings.append('publisher scope %s/%s expires %s, before the index (%s): a device that fetches afterwards rejects the WHOLE index'%(p['publisherId'],p['extensionId'],p['expiresAt'],i['expiresAt']))
+    return errors,warnings
 def read_archive(data):
     check(0<len(data)<=8388608,'archive bound')
     check(len(data)>=22 and data[-22:-18]==b'PK\x05\x06','canonical ZIP end record')
@@ -309,6 +345,9 @@ def cli():
     p=sub.add_parser('verify-root')
     for name in ['root','pin']:p.add_argument('--'+name,type=Path,required=True)
     p.add_argument('--previous',type=Path);p.add_argument('--now',default=datetime.now(timezone.utc).isoformat().replace('+00:00','Z'))
+    p=sub.add_parser('lint-repository');p.add_argument('--url',required=True)
+    for name in ['root','index','pin']:p.add_argument('--'+name,type=Path,required=True)
+    p.add_argument('--strict',action='store_true');p.add_argument('--now',default=datetime.now(timezone.utc).isoformat().replace('+00:00','Z'))
     p=sub.add_parser('prepare-envelope');p.add_argument('--domain',choices=['ROOT','INDEX'],required=True);p.add_argument('input',type=Path);p.add_argument('output',type=Path)
     a=parser.parse_args()
     if a.cmd=='test-chain':write_chain(a.output,a.module.read_bytes(),a.source_repository,a.source_commit)
@@ -339,6 +378,12 @@ def cli():
             check(previous['signed']['version']==1,'CLI previous root must be the pinned initial root; longer chains require authenticated persistent state')
             verify_root(previous,pin,time(a.now))
         verify_root(env,pin,time(a.now),previous);print('Root verified')
+    elif a.cmd=='lint-repository':
+        errors,warnings=lint_repository(a.url,a.root.read_bytes(),a.index.read_bytes(),strict(a.pin.read_bytes()),time(a.now))
+        for m in errors:print('ERROR: '+m)
+        for m in warnings:print('WARN: '+m)
+        if errors or (a.strict and warnings):raise SystemExit(1)
+        print('Repository hosting lint passed' if not warnings else 'Repository hosting lint passed with warnings')
     elif a.cmd=='prepare-envelope':
         signed=strict(a.input.read_bytes());validate(signed,a.domain.title()+'Signed');a.output.write_bytes(jcs({'signed':signed,'signatures':[]}))
 if __name__=='__main__':cli()

@@ -69,7 +69,8 @@ Overflowing any of these rejects the whole document. There is no truncation, so 
    not re-sign before expiry stops delivering updates; already installed packages stay usable.
 3. **`yanked` and `revoked` are one-way on the device.** A digest that was ever seen as revoked or yanked is kept in
    device state. Re-publishing the same digest as healthy later does not restore it. Cut a new release with a higher
-   `releaseSequence` instead.
+   `releaseSequence` instead. Pinned by `HostLifecycleCharacterizationTest`: if the host ever changes this, that test fails
+   and this document must change with it.
 4. **Revocation lives in two places.** The index entry flag and the root `revokedDigests`/`revokedKeys`. The root list is
    append-only across rotations; plan the 256-digest cap.
 5. **Release sequence is per extension and strictly increasing**; entries are ordered by `(extensionId, releaseSequence)`.

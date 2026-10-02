@@ -3,8 +3,10 @@
 Usage: python3 tools/differential_vectors.py OUTPUT_DIR FIXTURE_WASM
 
 Writes hostile strict-JSON documents, display names, ZIP mutations and publisher-scope cases together with the
-verdict of this repository's verifier. compatibility/host/.../DifferentialParityTest.kt feeds the same bytes to the
-unmodified host code and asserts that both sides agree, except for the explicitly listed benign differences.
+verdict of this repository's verifier, plus yank/revoke index sequences for the install-store characterization test.
+compatibility/host/.../DifferentialParityTest.kt feeds the same bytes to the unmodified host code and asserts that
+both sides agree, except for the explicitly listed benign differences. HostLifecycleCharacterizationTest pins the
+one-way yank/revoke behaviour documented in docs/repository-contract.md.
 No network, no production keys: every key is a public test seed.
 """
 import base64, copy, io, json, shutil, stat, struct, sys, zipfile
@@ -308,7 +310,18 @@ def main(out_dir, fixture_wasm):
             accepted, error = False, str(exc)
         scopes.append({'dir': 'scopes/' + name, 'name': name, 'pyAccept': accepted, 'pyErr': error})
     (out / 'scopes.json').write_text(json.dumps(scopes))
-    print('json=%d names=%d archives=%d scopes=%d' % (len(records), len(names), len(archives), len(scopes)))
+    # ------------------------------------------------------------------ E. install-store lifecycle (yank / revoke are one-way)
+    life = out / 'lifecycle'
+    write_case(life / 'base', base_data, base_manifest)
+    for kind, flag in [('yank', 'yanked'), ('revoke', 'revoked')]:
+        directory = life / kind
+        directory.mkdir(parents=True)
+        for sequence, value in [(2, True), (3, False)]:
+            signed_index = copy.deepcopy(base_index['signed'])
+            signed_index['sequence'] = sequence
+            signed_index['entries'][0][flag] = value
+            (directory / ('index-%d.json' % sequence)).write_bytes(arex.jcs(arex.envelope(signed_index, [keys[3]], 'INDEX')))
+    print('json=%d names=%d archives=%d scopes=%d lifecycle=2' % (len(records), len(names), len(archives), len(scopes)))
 
 
 if __name__ == '__main__':

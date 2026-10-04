@@ -1,0 +1,108 @@
+name: Private preview publication (manually trusted, not independently verified)
+# Temporary, explicitly private. NOT the production release path (release.yml stays blocked). The keys are derived from the
+# repository secret PREVIEW_KEY_SEED held by the operator; this is not independent three-party custody. A valid signature only
+# means "matches the identity the user accepted in the app". No private key is ever written, printed or uploaded.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - ep07/private-preview
+  schedule:
+    # Only runs once this file is on the default branch. The index is valid for six days; republish at least that often.
+    - cron: '17 3 * * *'
+permissions:
+  contents: write
+concurrency:
+  group: private-preview-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CATALOG_BRANCH: private-preview-catalog
+      PREVIEW_KEY_SEED: ${{ secrets.PREVIEW_KEY_SEED }}
+    steps:
+      - name: Require the operator secret
+        run: |
+          if [ -z "$PREVIEW_KEY_SEED" ] || [ "${#PREVIEW_KEY_SEED}" -lt 32 ]; then
+            echo "::error::Repository secret PREVIEW_KEY_SEED is missing or shorter than 32 characters. Create it once under Settings > Secrets and variables > Actions (64 random characters) and keep it: it is the only custody item of this private preview identity."
+            exit 1
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          path: extension
+      - name: Pinned toolchain and Python dependencies
+        working-directory: extension
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal
+          rustup target add --toolchain 1.95.0 wasm32v1-none
+          python3 -m pip install -r requirements.txt
+          bash tools/install_binaryen.sh "$RUNNER_TEMP/ep03-binaryen"
+          echo "$RUNNER_TEMP/ep03-binaryen/bin" >> "$GITHUB_PATH"
+      - name: Private preview unit tests (no secret involved)
+        working-directory: extension
+        env:
+          PREVIEW_KEY_SEED: ''
+        run: python3 -m unittest tests.test_private_preview -v
+      - name: Two independent clean AniWorld builds
+        working-directory: extension
+        env:
+          PREVIEW_KEY_SEED: ''
+        run: |
+          bash tools/build_aniworld.sh build/aniworld-a
+          bash tools/build_aniworld.sh build/aniworld-b
+          cmp build/aniworld-a/wasm32v1-none/release/arex_aniworld.wasm build/aniworld-b/wasm32v1-none/release/arex_aniworld.wasm
+      - name: Build, sign and verify the private preview catalog
+        id: chain
+        working-directory: extension
+        run: |
+          set +x
+          sequence="$(git rev-list --count HEAD)"
+          python3 tools/private_preview.py build \
+            --module build/aniworld-a/wasm32v1-none/release/arex_aniworld.wasm \
+            --output build/catalog \
+            --source-repository "https://github.com/${{ github.repository }}" \
+            --source-commit "${{ github.sha }}" \
+            --release-sequence "$sequence" \
+            --origin https://raw.githubusercontent.com \
+            --base-path "/${{ github.repository }}/${CATALOG_BRANCH}/catalog" | tee build/preview-public.json
+          echo "sequence=$sequence" >> "$GITHUB_OUTPUT"
+      - name: Publish the public catalog files
+        env:
+          PREVIEW_KEY_SEED: ''
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          git config --global user.name 'private-preview-publisher'
+          git config --global user.email 'private-preview-publisher@users.noreply.github.com'
+          remote="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          rm -rf catalog-branch
+          if git ls-remote --exit-code --heads "$remote" "$CATALOG_BRANCH" >/dev/null 2>&1; then
+            git clone --quiet --depth 1 --branch "$CATALOG_BRANCH" "$remote" catalog-branch
+          else
+            mkdir catalog-branch && cd catalog-branch && git init --quiet -b "$CATALOG_BRANCH" && git remote add origin "$remote" && cd ..
+          fi
+          mkdir -p catalog-branch/catalog
+          cp extension/build/catalog/root.json extension/build/catalog/index.json catalog-branch/catalog/
+          # Packages are digest-addressed and immutable: older ones stay, nothing is overwritten.
+          cp -rn extension/build/catalog/dist catalog-branch/catalog/
+          printf '%s\n' 'PRIVATE PREVIEW catalog. Manually trusted by the user, not independently verified. Not a production release.' > catalog-branch/README.txt
+          cd catalog-branch
+          git add -A
+          git diff --cached --quiet && echo 'catalog unchanged' || git commit --quiet -m "private preview catalog for ${{ github.sha }}"
+          git push --quiet origin "HEAD:${CATALOG_BRANCH}"
+      - name: Public summary
+        run: |
+          {
+            echo '## Private preview catalog (public values only)'
+            echo ''
+            echo 'Add this source URL in the app, then compare the fingerprint in the dialog with the one below:'
+            echo ''
+            echo "    https://raw.githubusercontent.com/${{ github.repository }}/${CATALOG_BRANCH}/catalog"
+            echo ''
+            echo '```json'
+            cat extension/build/preview-public.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -26,6 +26,47 @@ fn target()->ExtensionTargetV1{ExtensionTargetV1{target_token:"t1".into(),provid
 #[test]fn plan_never_guesses_direct(){let mut c=context(vec![SourceRole::DIRECT]);let mut t=target();t.source_season=None;c.targets.push(t);assert!(release::release_plan(&c).unwrap().is_empty());c.targets[0]=target();c.targets[0].provider_url=Some("https://evil.test/1".into());assert!(release::release_plan(&c).unwrap().is_empty());}
 #[test]fn direct_cap_and_track_dedup(){let mut c=context(vec![SourceRole::DIRECT]);for i in 1..=8{let mut t=target();t.target_token=format!("t{i}");t.installment.number=Some(i.to_string());c.targets.push(t);}assert_eq!(release::release_plan(&c).unwrap().len(),4);}
 #[test]fn recent_sub_and_dub_separate(){let o=listing(SourceRole::RECENT,RECENT);assert_eq!(o.observations.len(),2);assert_eq!(o.observations[0].track,ObservationTrack::DE_SUB);assert_eq!(o.observations[1].track,ObservationTrack::DE_DUB);assert!(o.observations.iter().all(|o|o.claim_kind==ObservationClaimKind::RELEASE_LISTING&&o.provider_series_key.as_deref()==Some("fixture-series")));}
+#[test]fn recent_films_keep_film_identity_without_a_season_or_episode_guess(){
+    let body=RECENT.replace("staffel-1/episode-1","filme/film-1").replace("S01 E01","Film 01");
+    let out=listing(SourceRole::RECENT,&body);
+    assert_eq!(out.response_reports[0].outcome,ExtensionReportOutcome::SUCCESS);
+    assert_eq!(out.observations.len(),2);
+    assert!(out.observations.iter().all(|o|o.installment.kind==ObservationInstallmentKind::FILM&&o.installment.number.as_deref()==Some("1")&&o.source_season.is_none()&&o.navigation_season.is_none()));
+    // The film URL is deliberately excluded from episode navigation plans.
+    let mut c=nav(NavigationTargetKind::EPISODE);c.provider_route_hint=Some("/anime/stream/fixture-series/filme/film-1".into());
+    assert!(navigation::navigation_url(&c).is_none());
+}
+#[test]fn film_route_label_mismatch_and_hostile_routes_fail_closed(){
+    for route in ["filme/film-2","filme/film-01","filme/film-1/extra","filme/film-1?x=1"]{
+        let body=RECENT.replace("staffel-1/episode-1",route).replace("S01 E01","Film 01");
+        let out=listing(SourceRole::RECENT,&body);assert!(out.observations.is_empty());
+        assert_eq!(out.response_reports[0].outcome,ExtensionReportOutcome::PARTIAL);
+    }
+    let body=RECENT.replace("staffel-1/episode-1","filme/film-1");
+    assert!(listing(SourceRole::RECENT,&body).observations.is_empty());
+}
+#[test]fn season_wide_postponement_retains_unknown_episode_and_raw_reason(){
+    let body=POSTPONEMENT.replace("Fixture Series","Fixture Series [Dub]").replace("• S01 E12","• S01")
+        .replace("📅 23.09. ▼ 30.09. (Sub)<br>","").replace("📅 14.10. ▼ 21.10. (Dub)","📅 24.04. ▼ ?<br>Publisher removed the dub for quality reasons");
+    let out=listing(SourceRole::POSTPONEMENT,&body);
+    assert_eq!(out.response_reports[0].outcome,ExtensionReportOutcome::SUCCESS);
+    let notice=&out.observations[0];assert_eq!(out.observations.len(),1);
+    assert_eq!(notice.raw_title,"Fixture Series");assert_eq!(notice.track,ObservationTrack::DE_DUB);
+    assert_eq!(notice.source_season,Some(1));assert_eq!(notice.installment.kind,ObservationInstallmentKind::UNKNOWN);
+    assert!(notice.installment.number.is_none()&&notice.parsed_timestamp.is_none()&&notice.provider_series_key.is_none());
+    assert!(notice.source_raw_text.as_ref().unwrap().contains("quality reasons"));
+}
+#[test]fn explanatory_notice_template_is_not_a_missing_fact(){
+    let body=POSTPONEMENT.replace("<p>","<p>Bsp:<br>⚠️ Anime<br>• Staffel Folge<br>Alter Termin ► Neuer Termin<br>( ► anderweitiger Grund | ▼ nach hinten verschoben | ▲ vorgezogen )<br>");
+    let out=listing(SourceRole::POSTPONEMENT,&body);
+    assert_eq!(out.response_reports[0].outcome,ExtensionReportOutcome::SUCCESS);
+    assert_eq!(out.observations,listing(SourceRole::POSTPONEMENT,POSTPONEMENT).observations);
+}
+#[test]fn conflicting_header_and_notice_tracks_do_not_invent_a_track(){
+    let out=listing(SourceRole::POSTPONEMENT,&POSTPONEMENT.replace("Fixture Series","Fixture Series [Dub]"));
+    assert_eq!(out.response_reports[0].outcome,ExtensionReportOutcome::PARTIAL);
+    assert_eq!(out.observations.len(),1);assert_eq!(out.observations[0].track,ObservationTrack::DE_DUB);
+}
 #[test]fn forecast_never_confirms_even_online(){let body=CALENDAR.replace("~ 12:00 Uhr","~ 12:00 Uhr <span title='Stream online!'>online</span>");let o=listing(SourceRole::CALENDAR,&body);assert_eq!(o.observations.len(),2);assert!(o.observations.iter().all(|o|o.claim_kind==ObservationClaimKind::FORECAST&&o.approximate&&o.parsed_timestamp.is_none()));}
 #[test]fn malformed_calendar_facts_are_partial_and_row_local(){
     let bad_day=listing(SourceRole::CALENDAR,&CALENDAR.replace("30.09.2026","31.02.2026"));

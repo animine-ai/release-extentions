@@ -51,6 +51,7 @@ jobs:
         env:
           PREVIEW_KEY_SEED: ''
         run: |
+          cargo +1.95.0 test --locked --workspace
           bash tools/build_aniworld.sh build/aniworld-a
           bash tools/build_aniworld.sh build/aniworld-b
           cmp build/aniworld-a/wasm32v1-none/release/arex_aniworld.wasm build/aniworld-b/wasm32v1-none/release/arex_aniworld.wasm

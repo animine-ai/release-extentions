@@ -4,10 +4,16 @@ use bounded::{decode,encode};
 use crate::{error,identity,page,route,html::Document,Result};
 fn diagnostic(code:&str)->ObservationDiagnosticV1{ObservationDiagnosticV1{code:code.into(),message:code.into()}}
 fn notice_tracks(line:&str)->Result<Vec<ObservationTrack>>{
-    let low=line.to_ascii_lowercase();let combined=low.contains("(sub+dub)")||low.contains("(dub+sub)");
+    let low=line.to_ascii_lowercase().replace('[',"(").replace(']',")");let combined=low.contains("(sub+dub)")||low.contains("(dub+sub)");
     let sub=low.contains("(sub)");let dub=low.contains("(dub)");
     if (sub&&dub)||(combined&&(sub||dub)){return Err(());}
     Ok(if combined{vec![ObservationTrack::DE_SUB,ObservationTrack::DE_DUB]}else if sub{vec![ObservationTrack::DE_SUB]}else if dub{vec![ObservationTrack::DE_DUB]}else{vec![]})
+}
+fn notice_title(title:&str)->&str{
+    let lower=title.to_ascii_lowercase();
+    for suffix in ["[sub]","[dub]","(sub)","(dub)","[sub+dub]","[dub+sub]","(sub+dub)","(dub+sub)"]{
+        if lower.ends_with(suffix){return title[..title.len()-suffix.len()].trim();}
+    }title
 }
 fn context(c:&ExtensionContextV1)->bool{
     identity(&c.extension_id,&c.provider_id)&&!c.source_roles.is_empty()&&
@@ -65,8 +71,10 @@ fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<P
         if !href.contains("/anime/stream/"){continue;}let section=if calendar{d.nearest_class(a,"calendarList")}else{None};if calendar&&section.is_none(){continue;}
         rows+=1;if rows>512{return Err(());}
         let parsed=(||->Result<Vec<ProviderObservationV1>>{
-            let route=route::parse(href).ok_or(())?;
-            if !calendar && (route.season.is_none() || route.episode.is_none()){return Err(());}
+            let film=if calendar{None}else{route::film(href)};
+            let route=if let Some((key,number))=&film{route::Route{key:key.clone(),season:None,episode:Some(number.clone())}}
+                else{route::parse(href).ok_or(())?};
+            if !calendar && film.is_none() && (route.season.is_none() || route.episode.is_none()){return Err(());}
             let row=if calendar{a}else{d.nearest_class(d.nodes[a].parent,"col-md-12").ok_or(())?};
             if !calendar&&d.descendants(row).filter(|i|d.nodes[*i].tag=="a").count()!=1{return Err(());}
             let title_node=d.unique(d.descendants(a),|n|if calendar{n.tag=="h3"&&n.class("seriesTitle")}else{n.tag=="strong"})?;
@@ -74,7 +82,8 @@ fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<P
             let coordinates=if calendar{
                 let small=d.descendants(a).find(|i|d.nodes[*i].tag=="small").ok_or(())?;
                 let label=d.raw_text(small,256)?;route::label(label.split_whitespace().next().ok_or(())?).ok_or(())?
-            }else{let coord=d.unique(d.descendants(a),|n|n.tag=="span"&&n.class("blue2"))?;route::label(&d.text(coord,64)?).ok_or(())?};
+            }else{let coord=d.unique(d.descendants(a),|n|n.tag=="span"&&n.class("blue2"))?;let label=d.text(coord,64)?;
+                if film.is_some(){(0,route::film_label(&label).ok_or(())?)}else{route::label(&label).ok_or(())?}};
             let(source_season,source_episode)=coordinates;
             if route.episode.as_ref().is_some_and(|number|number!=&source_episode){return Err(());}
             let number=source_episode;
@@ -91,7 +100,8 @@ fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<P
             }else{let n=d.unique(d.descendants(a),|n|n.class("elementFloatRight"))?;(Cow::Owned(route::date(&d.text(n,128)?).ok_or(())?),None,false)};
             let tracks=if calendar{page::tracks_cached(d,row,&mut track_cache)?}else{page::tracks(d,row)?};
             let mut facts=vec![];for track in tracks{
-                let mut o=observation(c,r,Some(route.key.clone()),title.clone(),Some(source_season),navigation_season,Some(number.clone()),track);
+                let mut o=observation(c,r,Some(route.key.clone()),title.clone(),if film.is_some(){None}else{Some(source_season)},navigation_season,Some(number.clone()),track);
+                if film.is_some(){o.installment.kind=ObservationInstallmentKind::FILM;}
                 o.source_date_text=Some(date.to_string());o.source_time_text=time.clone();o.approximate=approximate;
                 if o.track==ObservationTrack::UNKNOWN{o.diagnostics.push(diagnostic("UNKNOWN_LANGUAGE_TRACK"));}facts.push(o);
             }Ok(facts)
@@ -112,11 +122,21 @@ fn postponed(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec
     let p=d.unique(d.descendants(article),|n|n.tag=="p")?;let text=d.raw_text(p,32768)?;let mut out=vec![];let mut hashes=vec![];let mut partial=false;
     for block in text.split("----------------------------------------------------------------------"){
         let lines:Vec<_>=block.lines().map(str::trim).filter(|s|!s.is_empty()).collect();if lines.is_empty(){continue;}
-        let title=lines[0].trim_start_matches(['⚠','\u{fe0f}','🚨','ℹ',' ']).trim();if title.is_empty()||title.len()>1024{continue;}
+        let raw_title=lines[0].trim_start_matches(['⚠','\u{fe0f}','🚨','ℹ',' ']).trim();
+        let Ok(title_tracks)=notice_tracks(raw_title)else{partial=true;continue;};
+        let title=notice_title(raw_title);if title.is_empty()||title.len()>1024{continue;}
         for(i,line)in lines.iter().enumerate(){
             if !line.starts_with('•'){continue;}let coordinate=line.trim_start_matches('•').trim();let mut words=coordinate.split_whitespace();
-            let s=words.next().unwrap_or("");let e=words.next().unwrap_or("");let Some((season,number))=route::label(&route::join(&[s,e]))else{partial=true;continue;};
+            // The explanatory example is not a rejected source fact or a missing release.
+            if coordinate=="Staffel Folge"{continue;}
+            let s=words.next().unwrap_or("");let e=words.next().unwrap_or("");
+            let season_only=e.is_empty()||(words.clone().next().is_none()&&(e.starts_with('(')||e.starts_with('['))&&notice_tracks(line).is_ok_and(|t|!t.is_empty()));
+            let coordinates=if season_only{s.strip_prefix('S').and_then(|s|route::integer(s,9999)).map(|s|(s,None))}
+                else{route::label(&route::join(&[s,e])).map(|(s,n)|(s,Some(n)))};
+            let Some((season,number))=coordinates else{partial=true;continue;};
             let Ok(line_tracks)=notice_tracks(line)else{partial=true;continue;};
+            let line_tracks=if line_tracks.is_empty(){title_tracks.clone()}else{
+                if !title_tracks.is_empty()&&line_tracks.iter().any(|t|!title_tracks.contains(t)){partial=true;continue;}line_tracks};
             let mut seen=false;
             for date_line in lines.iter().skip(i+1).take_while(|s|!s.starts_with('•')){
                 let down=date_line.contains('▼');let up=date_line.contains('▲');
@@ -127,7 +147,14 @@ fn postponed(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec
                     if date_tracks.iter().any(|t|!line_tracks.contains(t)){partial=true;continue;}date_tracks.clone()
                 }else if !date_tracks.is_empty(){date_tracks.clone()}else if !line_tracks.is_empty(){line_tracks.clone()}else{vec![ObservationTrack::UNKNOWN]};
                 for track in tracks{
-                    let mut o=observation(c,r,None,title.into(),Some(season),None,Some(number.clone()),track);o.source_raw_text=Some(route::join(&[coordinate," ",date_line]));
+                    let mut o=observation(c,r,None,title.into(),Some(season),None,number.clone(),track);o.source_raw_text=Some(route::join(&[coordinate," ",date_line]));
+                    if number.is_none(){
+                        o.diagnostics.push(diagnostic("SEASON_WIDE_NOTICE_NO_EPISODE"));
+                        let raw=o.source_raw_text.as_mut().ok_or(())?;
+                        for explanation in lines.iter().skip(i+1).take_while(|s|!s.starts_with('•')){
+                            if !explanation.contains('▼')&&!explanation.contains('▲'){raw.push(' ');raw.push_str(explanation);}
+                        }
+                    }
                     if o.source_raw_text.as_ref().is_some_and(|s|s.len()>2048){partial=true;continue;}
                     o.schedule_marker=marker.clone();o.correction_marker=Some("POSTPONEMENT_NOTICE_UNBOUND".into());o.diagnostics.push(diagnostic("UNBOUND_PROVIDER_IDENTITY"));push_unique(&mut out,&mut hashes,o)?;
                 }

@@ -46,6 +46,17 @@ pub fn label(value:&str)->Option<(i32,String)>{
     let rest=label.strip_prefix('S')?;let (s,e)=rest.split_once('E')?;
     Some((integer(s,9999)?,integer(e,9999)?.to_string()))
 }
+// Film routes are listing identity only. They must never be treated as an episode navigation hint.
+pub fn film(value:&str)->Option<(String,String)>{
+    let mut parts=path(value)?.strip_prefix("/anime/stream/")?.split('/');
+    let key=parts.next()?;if !self::key(key)||parts.next()? != "filme"{return None;}
+    let number=episode(parts.next()?.strip_prefix("film-")?)?;
+    if parts.next().is_some(){return None;}Some((key.into(),number))
+}
+pub fn film_label(value:&str)->Option<String>{
+    let compact:String=value.chars().filter(|c|!c.is_whitespace()).collect();
+    Some(integer(compact.strip_prefix("Film")?,9999)?.to_string())
+}
 // Wall dates are retained without inventing a timezone/year or DST resolution.
 pub fn date(value:&str)->Option<String>{
     let mut dates=value.split_whitespace().filter(|p|p.len()==10 && p.as_bytes().get(2)==Some(&b'.') && p.as_bytes().get(5)==Some(&b'.'));

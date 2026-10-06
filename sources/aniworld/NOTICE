@@ -1,0 +1,3 @@
+AniWorld source materials and third-party materials remain all rights reserved by their respective rightsholders. This repository does not assert or grant a license or permission to those materials.
+
+The files in `fixtures/` are independently authored minimal factual structural reconstructions of observed public page grammar. They contain no copied provider HTML, descriptions, images, advertising, trackers, cookies, stylesheets, scripts, or third-party code. They use synthetic titles, episode values, and routes. See `provenance-fixtures.json` for capture evidence and fixture hashes.

@@ -2,7 +2,7 @@
   "extensionId": "de.aniworld",
   "providerId": "aniworld",
   "displayName": "AniWorld",
-  "status": "EP04_SKELETON_NOT_PUBLISHABLE",
+  "status": "EP04_TEST_ONLY_NOT_PRODUCTION_PUBLISHED",
   "capabilities": [
     "CALENDAR",
     "RECENT",
@@ -13,7 +13,10 @@
     "OVERVIEW_NAVIGATION",
     "EPISODE_NAVIGATION"
   ],
-  "allowedHosts": [],
+  "allowedHosts": [
+    "aniworld.to"
+  ],
   "publisherId": null,
-  "keyId": null
+  "keyId": null,
+  "version": "1.0.0-test.1"
 }

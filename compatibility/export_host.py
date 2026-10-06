@@ -4,7 +4,7 @@ from pathlib import Path
 repo=Path(__file__).resolve().parents[1];host=Path(sys.argv[1])
 lock=json.loads((repo/'compatibility/host-source-lock.json').read_text())
 out=repo/'compatibility/host/src/main/kotlin';out.mkdir(parents=True,exist_ok=True)
-selected=['ExtensionContracts.kt','NavigationContractsV1.kt','ExtensionPackageVerifier.kt','ExtensionTrust.kt','ExtensionWireCodec.kt','NavigationWireCodecV1.kt','ExtensionInstallStore.kt','ArexZipArchiveReader.kt','StrictWasmModuleProfileVerifier.kt']
+selected=['ExtensionUpdate.kt','ExtensionContracts.kt','NavigationContractsV1.kt','ExtensionPackageVerifier.kt','ExtensionTrust.kt','ExtensionWireCodec.kt','NavigationWireCodecV1.kt','ExtensionInstallStore.kt','ArexZipArchiveReader.kt','StrictWasmModuleProfileVerifier.kt']
 for path,digest in lock['files'].items():
     if Path(path).name not in selected and path!='tools/ep02-android/native/src/lib.rs':continue
     data=(host/path).read_bytes()

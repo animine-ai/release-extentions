@@ -16,6 +16,12 @@ SAFE=9007199254740991
 LIMITS={'manifest.json':65536,'module.wasm':8388608,'provenance.json':262144,'NOTICE':262144,'package.sig':1024}
 ROLES={'CALENDAR','RECENT','POSTPONEMENT','DIRECT'}
 NAV={'OVERVIEW_NAVIGATION','EPISODE_NAVIGATION'}
+ANIWORLD_ROLES=['CALENDAR','RECENT','POSTPONEMENT','DIRECT']
+ANIWORLD_NAVIGATION=['OVERVIEW_NAVIGATION','EPISODE_NAVIGATION']
+ANIWORLD_TEST_PUBLISHER='aniworld.test.publisher'
+ANIWORLD_TEST_REPOSITORY='aniworld.test.repository'
+ANIWORLD_TEST_WORKFLOW='ep04-aniworld-public-test/v1'
+ANIWORLD_TEST_VERSION='1.0.0-test.1'
 FIXTURE_TIME='2026-09-29T12:00:00Z'
 FIXTURE_NOW=datetime.fromisoformat(FIXTURE_TIME.replace('Z','+00:00'))
 
@@ -41,6 +47,7 @@ def safe_tree(value,depth=0):
     if type(value) is str:
         value.encode('utf-8','strict');return
     if type(value) is list:
+        check(len(value)<=4096,'array entry limit')  # host ExtensionWireCodec cap; every schema array is smaller
         for v in value:safe_tree(v,depth+1)
         return
     if type(value) is dict:
@@ -151,6 +158,41 @@ def verify_index(env,root,pin,now,last=None):
         check(any(p['publisherId']==e['publisherId'] and p['extensionId']==e['extensionId'] and p['providerId']==e['providerId'] and p['keyId']==e['keyId'] and time(p['notBefore'])<=now<time(p['expiresAt']) for p in r['publishers']),'publisher scope missing')
         order.append((e['extensionId'],e['releaseSequence']))
     check(all(a<b for a,b in zip(order,order[1:])),'catalog order/duplicate release');return env
+HOST_NAME=re.compile(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+')
+ROOT_FETCH_CAP,INDEX_FETCH_CAP=65536,262144
+def normalize_repository_url(value,origins):
+    """Mirror of the app's repository address rules (NormalizedExtensionSource.parse plus the transport origin check)."""
+    text=value.strip();check(1<=len(text)<=2048 and all(0x21<=ord(c)<=0x7e for c in text) and '\\' not in text and '%' not in text,'ambiguous or oversized repository URL')
+    check('?' not in text and '#' not in text,'repository URL must not carry a query or fragment')
+    u=urlsplit(text);host=(u.hostname or '').lower()
+    check(u.scheme.lower()=='https' and u.username is None and u.password is None,'repository URL must be plain https without credentials')
+    check(u.port in (None,443),'repository port')
+    check(len(host)<=253 and HOST_NAME.fullmatch(host) is not None and not all(c.isdigit() or c=='.' for c in host),'repository host must be a canonical DNS hostname')
+    check(all(part not in ('.','..') for part in u.path.split('/')) and '//' not in u.path,'repository path')
+    origin='https://'+host;check(origin in origins,'repository origin is not independently authenticated by the app pin')
+    return origin+u.path.rstrip('/')
+def lint_repository(url,root_bytes,index_bytes,pin,now):
+    """Publisher-side hosting lint. Returns (errors,warnings); errors are conditions the original host rejects."""
+    errors,warnings=[],[]
+    def run(label,fn):
+        try:return fn()
+        except (ValueError,KeyError,TypeError,UnicodeError) as exc:errors.append(label+': '+str(exc))
+    run('url',lambda:normalize_repository_url(url,set(pin['distributionOrigins'])))
+    if len(root_bytes)>ROOT_FETCH_CAP:errors.append('root.json is %d bytes; the app fetches at most %d'%(len(root_bytes),ROOT_FETCH_CAP))
+    if len(index_bytes)>INDEX_FETCH_CAP:errors.append('index.json is %d bytes; the app fetches at most %d'%(len(index_bytes),INDEX_FETCH_CAP))
+    root=run('root',lambda:strict(root_bytes,ROOT_FETCH_CAP));index=run('index',lambda:strict(index_bytes,INDEX_FETCH_CAP))
+    if root is None or index is None:return errors,warnings
+    if run('root',lambda:verify_root(root,pin,now)) is None or run('index',lambda:verify_index(index,root,pin,now)) is None:return errors,warnings
+    r,i=root['signed'],index['signed']
+    if len(index_bytes)*5>INDEX_FETCH_CAP*4:warnings.append('index.json uses %d of %d fetch bytes; one overflow fails the whole catalog closed'%(len(index_bytes),INDEX_FETCH_CAP))
+    if len(i['entries'])*5>256*4:warnings.append('%d of 256 index entries used'%len(i['entries']))
+    left=time(i['expiresAt'])-now
+    if left<timedelta(hours=48):warnings.append('index expires in %.1f hours; devices stop accepting new data after expiry'%(left.total_seconds()/3600))
+    if time(r['expiresAt'])-now<timedelta(days=30):warnings.append('root expires in under 30 days')
+    for p in r['publishers']:
+        if time(p['expiresAt'])<time(i['expiresAt']):
+            warnings.append('publisher scope %s/%s expires %s, before the index (%s): a device that fetches afterwards rejects the WHOLE index'%(p['publisherId'],p['extensionId'],p['expiresAt'],i['expiresAt']))
+    return errors,warnings
 def read_archive(data):
     check(0<len(data)<=8388608,'archive bound')
     check(len(data)>=22 and data[-22:-18]==b'PK\x05\x06','canonical ZIP end record')
@@ -216,6 +258,15 @@ def build_package(module,source_repo,source_commit,key,lock,workflow='ep03-ci/v1
     prov=jcs(validate(p,'Provenance'))
     m={'schemaVersion':1,'extensionId':'fixture.release','providerId':'fixture','displayName':'Fixture Provider','version':'0.1.0','releaseSequence':1,'hostApiMin':1,'hostApiMax':1,'capabilities':['CALENDAR'],'navigationCapabilities':['OVERVIEW_NAVIGATION','EPISODE_NAVIGATION'],'allowedHosts':['example.org'],'digests':{n:{'sha256':sha(d),'bytes':len(d)} for n,d in [('module',module),('provenance',prov),('notice',notice)]},'publisherId':'fixture.publisher','keyId':key_id(key),'sourceRepository':source_repo,'sourceCommit':source_commit,'build':{'toolchainVersion':'1.95.0','target':'wasm32v1-none','lockfileDigest':sha(lock),'workflowIdentity':workflow}}
     return assemble_package(module,m,p,notice,key)
+def build_aniworld_test_package(module,source_repo,source_commit,key,lock):
+    check(module.startswith(b'\x00asm\x01\x00\x00\x00'),'core wasm required')
+    notice_path=ROOT/'sources/aniworld/NOTICE'
+    check(notice_path.is_file(),'AniWorld NOTICE missing')
+    notice=b'AREX TEST ONLY: de.aniworld package for host validation; never publish or use in production.\n\n'+notice_path.read_bytes()
+    p={'schemaVersion':1,'sourceRepository':source_repo,'sourceCommit':source_commit,'licenseSpdx':['GPL-3.0-only'],'components':[{'name':'arex-aniworld','origin':source_repo,'path':'sources/aniworld','licenseSpdx':'GPL-3.0-only'},{'name':'arex-sdk','origin':source_repo,'path':'sdk/rust','licenseSpdx':'GPL-3.0-only'}],'localModifications':[],'compilerVersion':'rustc 1.95.0 + Binaryen 133','sdkVersion':'0.1.0','dependencyLockDigest':sha(lock),'reproducibleBuildCommand':'bash tools/build_aniworld.sh','workflowIdentity':ANIWORLD_TEST_WORKFLOW,'moduleDigest':sha(module)}
+    prov=jcs(validate(p,'Provenance'))
+    m={'schemaVersion':1,'extensionId':'de.aniworld','providerId':'aniworld','displayName':'AniWorld','version':ANIWORLD_TEST_VERSION,'releaseSequence':1,'hostApiMin':1,'hostApiMax':1,'capabilities':ANIWORLD_ROLES.copy(),'navigationCapabilities':ANIWORLD_NAVIGATION.copy(),'allowedHosts':['aniworld.to'],'digests':{n:{'sha256':sha(d),'bytes':len(d)} for n,d in [('module',module),('provenance',prov),('notice',notice)]},'publisherId':ANIWORLD_TEST_PUBLISHER,'keyId':key_id(key),'sourceRepository':source_repo,'sourceCommit':source_commit,'build':{'toolchainVersion':'1.95.0','target':'wasm32v1-none','lockfileDigest':sha(lock),'workflowIdentity':ANIWORLD_TEST_WORKFLOW}}
+    return assemble_package(module,m,p,notice,key)
 def assemble_package(module,manifest,provenance,notice,key):
     m=copy.deepcopy(manifest);p=copy.deepcopy(provenance)
     m['keyId']=key_id(key);p['moduleDigest']=sha(module)
@@ -232,15 +283,34 @@ def assemble_package(module,manifest,provenance,notice,key):
             entry=zipfile.ZipInfo(name,date_time=(1980,1,1,0,0,0));entry.create_system=3;entry.external_attr=0o100644<<16
             z.writestr(entry,data)
     data=out.getvalue();check(len(data)<=8388608,'built archive bound');return data,m
-def fixture_chain(data,manifest):
-    keys=[test_key(i) for i in range(5)];ids=[key_id(k) for k in keys]
-    signed={'schemaVersion':1,'repositoryId':'fixture.repository','version':1,'expiresAt':'2030-01-01T00:00:00Z','keys':[{'keyId':key_id(k),'publicKey':b64(public(k))} for k in keys],'roles':{'root':{'threshold':2,'keyIds':ids[:3]},'index':{'threshold':1,'keyIds':[ids[3]]}},'publishers':[{'publisherId':manifest['publisherId'],'extensionId':manifest['extensionId'],'providerId':manifest['providerId'],'keyId':ids[4],'roles':manifest['capabilities'],'navigation':manifest['navigationCapabilities'],'hosts':manifest['allowedHosts'],'notBefore':'2026-01-01T00:00:00Z','expiresAt':'2030-01-01T00:00:00Z'}],'revokedKeys':[],'revokedDigests':[]}
+def test_chain(data,manifest,repository_id,origin,key_labels):
+    keys=[test_key(i) for i in key_labels];ids=[key_id(k) for k in keys]
+    signed={'schemaVersion':1,'repositoryId':repository_id,'version':1,'expiresAt':'2030-01-01T00:00:00Z','keys':[{'keyId':key_id(k),'publicKey':b64(public(k))} for k in keys],'roles':{'root':{'threshold':2,'keyIds':ids[:3]},'index':{'threshold':1,'keyIds':[ids[3]]}},'publishers':[{'publisherId':manifest['publisherId'],'extensionId':manifest['extensionId'],'providerId':manifest['providerId'],'keyId':ids[4],'roles':manifest['capabilities'],'navigation':manifest['navigationCapabilities'],'hosts':manifest['allowedHosts'],'notBefore':'2026-01-01T00:00:00Z','expiresAt':'2030-01-01T00:00:00Z'}],'revokedKeys':[],'revokedDigests':[]}
     root=envelope(signed,keys[:2],'ROOT')
-    pin={'repositoryId':'fixture.repository','initialRootSha256':sha(jcs(signed)),'distributionOrigins':['https://packages.example.org']}
+    pin={'repositoryId':repository_id,'initialRootSha256':sha(jcs(signed)),'distributionOrigins':[origin]}
     entry={n:manifest[n] for n in ['extensionId','providerId','displayName','navigationCapabilities','publisherId','keyId','version','releaseSequence','hostApiMin','hostApiMax']}
-    entry.update({'packageUrl':'https://packages.example.org/dist/fixture.release/0.1.0/'+sha(data)+'.arex','archiveSha256':sha(data),'archiveBytes':len(data),'manifestSha256':sha(jcs(manifest)),'yanked':False,'revoked':False})
+    entry.update({'packageUrl':origin+'/dist/'+manifest['extensionId']+'/'+manifest['version']+'/'+sha(data)+'.arex','archiveSha256':sha(data),'archiveBytes':len(data),'manifestSha256':sha(jcs(manifest)),'yanked':False,'revoked':False})
     index=envelope({'schemaVersion':1,'repositoryId':pin['repositoryId'],'rootVersion':1,'sequence':1,'issuedAt':FIXTURE_TIME,'expiresAt':'2026-10-05T12:00:00Z','entries':[entry]},[keys[3]],'INDEX')
     return root,index,pin
+def fixture_chain(data,manifest):
+    return test_chain(data,manifest,'fixture.repository','https://packages.example.org',range(5))
+def aniworld_test_chain(data,manifest):
+    return test_chain(data,manifest,ANIWORLD_TEST_REPOSITORY,'https://packages.example.org',range(10,15))
+def verify_aniworld_test_chain(data,index,root,pin,now):
+    check(len(index['signed']['entries'])==1 and len(root['signed']['publishers'])==1,'AniWorld test chain scope count')
+    manifest=verify_package(data,index['signed']['entries'][0],root,now)
+    check(manifest['extensionId']=='de.aniworld' and manifest['providerId']=='aniworld' and manifest['displayName']=='AniWorld','AniWorld test identity')
+    check(manifest['publisherId']==ANIWORLD_TEST_PUBLISHER and manifest['version']==ANIWORLD_TEST_VERSION,'AniWorld test release marker')
+    check(set(manifest['capabilities'])==set(ANIWORLD_ROLES),'AniWorld release role grant')
+    check(set(manifest['navigationCapabilities'])==set(ANIWORLD_NAVIGATION),'AniWorld navigation grant')
+    check(manifest['allowedHosts']==['aniworld.to'],'AniWorld exact host grant')
+    check(manifest['build']['workflowIdentity']==ANIWORLD_TEST_WORKFLOW,'AniWorld test workflow identity')
+    check(root['signed']['repositoryId']==ANIWORLD_TEST_REPOSITORY and pin['distributionOrigins']==['https://packages.example.org'],'AniWorld test trust scope')
+    publisher=root['signed']['publishers'][0]
+    check(publisher['publisherId']==ANIWORLD_TEST_PUBLISHER and publisher['extensionId']=='de.aniworld' and publisher['providerId']=='aniworld','AniWorld test publisher identity')
+    check(set(publisher['roles'])==set(ANIWORLD_ROLES) and set(publisher['navigation'])==set(ANIWORLD_NAVIGATION) and publisher['hosts']==['aniworld.to'],'AniWorld exact publisher scope')
+    check(b'AREX TEST ONLY' in read_archive(data)['NOTICE'],'AniWorld test-only notice')
+    return manifest
 def write_chain(output,module,source_repo,commit):
     output.mkdir(parents=True,exist_ok=True)
     data,m=build_package(module,source_repo,commit,test_key(4),(ROOT/'Cargo.lock').read_bytes())
@@ -249,10 +319,22 @@ def write_chain(output,module,source_repo,commit):
     (output/'fixture.arex').write_bytes(data)
     for name,val in [('root.json',root),('index.json',index),('test-pin.json',pin),('manifest.json',m)]: (output/name).write_bytes(jcs(val))
     (output/'SHA256SUMS').write_text(''.join(sha(p.read_bytes())+'  '+p.name+'\n' for p in sorted(output.iterdir()) if p.is_file() and p.name!='SHA256SUMS'))
+def write_aniworld_test_chain(output,module,source_repo,commit):
+    output.mkdir(parents=True,exist_ok=True)
+    key=test_key(14)
+    data,m=build_aniworld_test_package(module,source_repo,commit,key,(ROOT/'Cargo.lock').read_bytes())
+    root,index,pin=aniworld_test_chain(data,m)
+    verify_root(root,pin,FIXTURE_NOW);verify_index(index,root,pin,FIXTURE_NOW)
+    verify_aniworld_test_chain(data,index,root,pin,FIXTURE_NOW)
+    artifacts={'aniworld-test.arex':data,'root.json':jcs(root),'index.json':jcs(index),'test-pin.json':jcs(pin),'manifest.json':jcs(m)}
+    for name,payload in artifacts.items():(output/name).write_bytes(payload)
+    (output/'SHA256SUMS').write_text(''.join(sha(payload)+'  '+name+'\n' for name,payload in sorted(artifacts.items())))
 def cli():
     parser=argparse.ArgumentParser();sub=parser.add_subparsers(dest='cmd',required=True)
     p=sub.add_parser('test-chain');p.add_argument('--module',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--source-repository',required=True);p.add_argument('--source-commit',required=True)
+    p=sub.add_parser('test-aniworld-chain');p.add_argument('--module',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--source-repository',required=True);p.add_argument('--source-commit',required=True)
     p=sub.add_parser('verify-chain');p.add_argument('directory',type=Path);p.add_argument('--now',default=FIXTURE_TIME)
+    p=sub.add_parser('verify-aniworld-chain');p.add_argument('directory',type=Path);p.add_argument('--now',default=FIXTURE_TIME)
     p=sub.add_parser('canonicalize');p.add_argument('input',type=Path)
     p=sub.add_parser('sign-envelope');p.add_argument('--domain',choices=['ROOT','INDEX'],required=True);p.add_argument('--key-file',type=Path,required=True);p.add_argument('input',type=Path);p.add_argument('output',type=Path)
     p=sub.add_parser('build');
@@ -263,12 +345,20 @@ def cli():
     p=sub.add_parser('verify-root')
     for name in ['root','pin']:p.add_argument('--'+name,type=Path,required=True)
     p.add_argument('--previous',type=Path);p.add_argument('--now',default=datetime.now(timezone.utc).isoformat().replace('+00:00','Z'))
+    p=sub.add_parser('lint-repository');p.add_argument('--url',required=True)
+    for name in ['root','index','pin']:p.add_argument('--'+name,type=Path,required=True)
+    p.add_argument('--strict',action='store_true');p.add_argument('--now',default=datetime.now(timezone.utc).isoformat().replace('+00:00','Z'))
     p=sub.add_parser('prepare-envelope');p.add_argument('--domain',choices=['ROOT','INDEX'],required=True);p.add_argument('input',type=Path);p.add_argument('output',type=Path)
     a=parser.parse_args()
     if a.cmd=='test-chain':write_chain(a.output,a.module.read_bytes(),a.source_repository,a.source_commit)
+    elif a.cmd=='test-aniworld-chain':write_aniworld_test_chain(a.output,a.module.read_bytes(),a.source_repository,a.source_commit)
     elif a.cmd=='verify-chain':
         d=a.directory;root=strict((d/'root.json').read_bytes(),65536);index=strict((d/'index.json').read_bytes());pin=strict((d/'test-pin.json').read_bytes());now=time(a.now)
         verify_root(root,pin,now);verify_index(index,root,pin,now);verify_package((d/'fixture.arex').read_bytes(),index['signed']['entries'][0],root,now);print('TEST chain verified; not a production trust root')
+    elif a.cmd=='verify-aniworld-chain':
+        d=a.directory;root=strict((d/'root.json').read_bytes(),65536);index=strict((d/'index.json').read_bytes());pin=strict((d/'test-pin.json').read_bytes());now=time(a.now)
+        verify_root(root,pin,now);verify_index(index,root,pin,now);check(len(index['signed']['entries'])==1,'AniWorld test chain entry count')
+        verify_aniworld_test_chain((d/'aniworld-test.arex').read_bytes(),index,root,pin,now);print('AniWorld TEST chain verified; public test keys, not for production')
     elif a.cmd=='canonicalize':sys.stdout.buffer.write(jcs(strict(a.input.read_bytes())))
     elif a.cmd=='sign-envelope':
         # Caller supplies an externally protected ephemeral seed file. No key output/logging.
@@ -288,6 +378,12 @@ def cli():
             check(previous['signed']['version']==1,'CLI previous root must be the pinned initial root; longer chains require authenticated persistent state')
             verify_root(previous,pin,time(a.now))
         verify_root(env,pin,time(a.now),previous);print('Root verified')
+    elif a.cmd=='lint-repository':
+        errors,warnings=lint_repository(a.url,a.root.read_bytes(),a.index.read_bytes(),strict(a.pin.read_bytes()),time(a.now))
+        for m in errors:print('ERROR: '+m)
+        for m in warnings:print('WARN: '+m)
+        if errors or (a.strict and warnings):raise SystemExit(1)
+        print('Repository hosting lint passed' if not warnings else 'Repository hosting lint passed with warnings')
     elif a.cmd=='prepare-envelope':
         signed=strict(a.input.read_bytes());validate(signed,a.domain.title()+'Signed');a.output.write_bytes(jcs({'signed':signed,'signatures':[]}))
 if __name__=='__main__':cli()

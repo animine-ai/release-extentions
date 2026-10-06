@@ -1,0 +1,185 @@
+use alloc::{borrow::Cow,string::{String,ToString},vec,vec::Vec};
+use arex_sdk::*;
+use bounded::{decode,encode};
+use crate::{error,identity,page,route,html::Document,Result};
+fn diagnostic(code:&str)->ObservationDiagnosticV1{ObservationDiagnosticV1{code:code.into(),message:code.into()}}
+fn notice_tracks(line:&str)->Result<Vec<ObservationTrack>>{
+    let low=line.to_ascii_lowercase().replace('[',"(").replace(']',")");let combined=low.contains("(sub+dub)")||low.contains("(dub+sub)");
+    let sub=low.contains("(sub)");let dub=low.contains("(dub)");
+    if (sub&&dub)||(combined&&(sub||dub)){return Err(());}
+    Ok(if combined{vec![ObservationTrack::DE_SUB,ObservationTrack::DE_DUB]}else if sub{vec![ObservationTrack::DE_SUB]}else if dub{vec![ObservationTrack::DE_DUB]}else{vec![]})
+}
+fn notice_title(title:&str)->&str{
+    let lower=title.to_ascii_lowercase();
+    for suffix in ["[sub]","[dub]","(sub)","(dub)","[sub+dub]","[dub+sub]","(sub+dub)","(dub+sub)"]{
+        if lower.ends_with(suffix){return title[..title.len()-suffix.len()].trim();}
+    }title
+}
+fn context(c:&ExtensionContextV1)->bool{
+    identity(&c.extension_id,&c.provider_id)&&!c.source_roles.is_empty()&&
+        !c.source_roles.iter().enumerate().any(|(i,r)|c.source_roles.iter().take(i).any(|v|v==r))&&
+        !c.targets.iter().enumerate().any(|(i,t)|c.targets.iter().take(i).any(|v|v.target_token==t.target_token))
+}
+fn target_url(t:&ExtensionTargetV1)->Option<String>{
+    if t.installment.kind!=ObservationInstallmentKind::EPISODE||t.track==ObservationTrack::UNKNOWN{return None;}
+    let _source_season=t.source_season?;let navigation_season=t.navigation_season?;
+    let number=t.installment.number.as_deref()?;let constructed=route::exact(&t.provider_series_key,navigation_season,number)?;
+    if let Some(hint)=&t.provider_url{if route::url(hint)?!=constructed{return None;}}
+    Some(constructed)
+}
+pub(crate) fn release_plan(c:&ExtensionContextV1)->Result<Vec<RequestSpec>>{
+    if !context(c){return Err(());}let mut out=vec![];
+    for role in &c.source_roles{
+        let(id,url)=match role{SourceRole::CALENDAR=>("calendar",route::CALENDAR),SourceRole::RECENT=>("recent",route::RECENT),SourceRole::POSTPONEMENT=>("postponement",route::POSTPONEMENT),SourceRole::DIRECT=>continue};
+        out.push(RequestSpec{request_id:id.into(),source_role:role.clone(),url:url.into(),method:ExtensionMethod::GET,target_token:None});
+    }
+    if c.source_roles.contains(&SourceRole::DIRECT){for(i,t)in c.targets.iter().enumerate(){
+        if out.iter().filter(|r|r.source_role==SourceRole::DIRECT).count()==4{break;}
+        if let Some(url)=target_url(t){
+            out.push(RequestSpec{request_id:route::join(&["direct-",&i.to_string()]),source_role:SourceRole::DIRECT,url,method:ExtensionMethod::GET,target_token:Some(t.target_token.clone())});
+        }
+    }}Ok(out)
+}
+pub fn plan(bytes:&[u8])->Vec<u8>{
+    let Ok(i)=decode::<PlanInputV1>(bytes,256*1024)else{return error();};let Ok(requests)=release_plan(&i.context)else{return error();};
+    let _=abi::diagnostic_text("de.aniworld release plan");encode(&PlanOutputV1{schema_version:1,requests},65536).unwrap_or_else(|_|error())
+}
+fn observation(c:&ExtensionContextV1,r:&ResponseEnvelope,key:Option<String>,title:String,source_season:Option<i32>,navigation_season:Option<i32>,number:Option<String>,track:ObservationTrack)->ProviderObservationV1{
+    ProviderObservationV1{schema_version:1,extension_id:c.extension_id.clone(),provider_id:c.provider_id.clone(),request_id:r.request_id.clone(),source_role:r.source_role.clone(),provider_series_key:key,raw_title:title,source_season,navigation_season,installment:InstallmentV1{kind:if number.is_some(){ObservationInstallmentKind::EPISODE}else{ObservationInstallmentKind::UNKNOWN},number},track,
+        claim_kind:match r.source_role{SourceRole::CALENDAR=>ObservationClaimKind::FORECAST,SourceRole::RECENT=>ObservationClaimKind::RELEASE_LISTING,SourceRole::POSTPONEMENT=>ObservationClaimKind::CORRECTION,SourceRole::DIRECT=>ObservationClaimKind::DIRECT_AVAILABILITY},source_date_text:None,source_time_text:None,source_raw_text:None,parsed_timestamp:None,approximate:false,schedule_marker:ObservationScheduleMarker::NONE,correction_marker:None,source_url:r.final_url.clone().unwrap_or_default(),source_hash:r.source_hash.clone().unwrap_or_default(),diagnostics:vec![]}
+}
+fn heading(d:&Document,text:&str)->Result<()>{let h=d.unique(1..d.nodes.len(),|n|n.tag=="h1")?;if d.text(h,256)?!=text{return Err(());}Ok(())}
+fn push_unique(out:&mut Vec<ProviderObservationV1>,hashes:&mut Vec<u64>,o:ProviderObservationV1)->Result<()>{
+    // This hash is only an equality prefilter. A collision still requires full DTO
+    // equality, so no observation, language track or correction can be lost to it.
+    let mut h=14695981039346656037u64;
+    for s in [o.provider_series_key.as_deref().unwrap_or(""),o.installment.number.as_deref().unwrap_or("")]{for b in s.bytes(){h=(h^(b as u64)).wrapping_mul(1099511628211);}h=h.wrapping_mul(1099511628211);}
+    h^=(o.source_season.unwrap_or(0) as u64)<<8;h^=o.track.clone() as u64;
+    if hashes.iter().zip(out.iter()).any(|(v,p)|*v==h&&p==&o){return Ok(());}
+    if out.len()>=512{return Err(());}hashes.push(h);out.push(o);Ok(())
+}
+fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<ProviderObservationV1>,bool)>{
+    let calendar=r.source_role==SourceRole::CALENDAR;heading(d,if calendar{"Animekalender"}else{"Neue Episoden"})?;
+    let list=if calendar{0}else{d.unique(1..d.nodes.len(),|n|n.class("newEpisodeList"))?};
+    let mut out=vec![];let mut hashes=vec![];let mut rows=0;let mut partial=false;
+    // A calendar day heading is shared by its episode links. Cache the validated
+    // date, including a failed validation, so every row keeps the same outcome.
+    let mut day_dates:Vec<(usize,Option<String>)>=vec![];
+    let mut track_cache=page::TrackCache::new();
+    for a in d.descendants(list){
+        if d.nodes[a].tag!="a"{continue;}let Some(href)=d.nodes[a].attr("href")else{continue;};
+        if !href.contains("/anime/stream/"){continue;}let section=if calendar{d.nearest_class(a,"calendarList")}else{None};if calendar&&section.is_none(){continue;}
+        rows+=1;if rows>512{return Err(());}
+        let parsed=(||->Result<Vec<ProviderObservationV1>>{
+            let film=if calendar{None}else{route::film(href)};
+            let route=if let Some((key,number))=&film{route::Route{key:key.clone(),season:None,episode:Some(number.clone())}}
+                else{route::parse(href).ok_or(())?};
+            if !calendar && film.is_none() && (route.season.is_none() || route.episode.is_none()){return Err(());}
+            let row=if calendar{a}else{d.nearest_class(d.nodes[a].parent,"col-md-12").ok_or(())?};
+            if !calendar&&d.descendants(row).filter(|i|d.nodes[*i].tag=="a").count()!=1{return Err(());}
+            let title_node=d.unique(d.descendants(a),|n|if calendar{n.tag=="h3"&&n.class("seriesTitle")}else{n.tag=="strong"})?;
+            let title=d.text(title_node,1024)?;
+            let coordinates=if calendar{
+                let small=d.descendants(a).find(|i|d.nodes[*i].tag=="small").ok_or(())?;
+                let label=d.raw_text(small,256)?;route::label(label.split_whitespace().next().ok_or(())?).ok_or(())?
+            }else{let coord=d.unique(d.descendants(a),|n|n.tag=="span"&&n.class("blue2"))?;let label=d.text(coord,64)?;
+                if film.is_some(){(0,route::film_label(&label).ok_or(())?)}else{route::label(&label).ok_or(())?}};
+            let(source_season,source_episode)=coordinates;
+            if route.episode.as_ref().is_some_and(|number|number!=&source_episode){return Err(());}
+            let number=source_episode;
+            // Calendar series links prove no navigation season. Preserve the explicit
+            // source label without assuming split/cour coordinates are interchangeable.
+            let navigation_season=route.season;
+            let(date,time,approximate)=if calendar{
+                let section=section.ok_or(())?;
+                let index=if let Some(index)=day_dates.iter().position(|(n,_)|*n==section){index}
+                    else{let date=(||{let h=d.unique(d.descendants(section),|n|n.tag=="h3"&&!n.class("seriesTitle")).ok()?;route::date(&d.text(h,128).ok()?)})();day_dates.push((section,date));day_dates.len()-1};
+                let date=day_dates[index].1.as_deref().ok_or(())?;
+                let small=d.descendants(a).filter(|i|d.nodes[*i].tag=="small").nth(1).ok_or(())?;let text=d.text(small,256)?;
+                (Cow::Borrowed(date),Some(route::time(&text).ok_or(())?),text.contains('~'))
+            }else{let n=d.unique(d.descendants(a),|n|n.class("elementFloatRight"))?;(Cow::Owned(route::date(&d.text(n,128)?).ok_or(())?),None,false)};
+            let tracks=if calendar{page::tracks_cached(d,row,&mut track_cache)?}else{page::tracks(d,row)?};
+            let mut facts=vec![];for track in tracks{
+                let mut o=observation(c,r,Some(route.key.clone()),title.clone(),if film.is_some(){None}else{Some(source_season)},navigation_season,Some(number.clone()),track);
+                if film.is_some(){o.installment.kind=ObservationInstallmentKind::FILM;}
+                o.source_date_text=Some(date.to_string());o.source_time_text=time.clone();o.approximate=approximate;
+                if o.track==ObservationTrack::UNKNOWN{o.diagnostics.push(diagnostic("UNKNOWN_LANGUAGE_TRACK"));}facts.push(o);
+            }Ok(facts)
+        })();
+        match parsed{Ok(facts)=>for o in facts{push_unique(&mut out,&mut hashes,o)?;},Err(())=>partial=true}
+    }
+    Ok((out,partial))
+}
+fn direct(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document,p:&RequestSpec)->Result<Vec<ProviderObservationV1>>{
+    let t=c.targets.iter().find(|t|p.target_token.as_ref()==Some(&t.target_token)).ok_or(())?;
+    let source_season=t.source_season.ok_or(())?;let navigation_season=t.navigation_season.ok_or(())?;let number=t.installment.number.as_deref().ok_or(())?;
+    let(title,available)=page::episode(d,&p.url,navigation_season,number)?;if !available.contains(&t.track){return Ok(vec![]);}
+    Ok(vec![observation(c,r,Some(t.provider_series_key.clone()),title,Some(source_season),Some(navigation_season),Some(number.into()),t.track.clone())])
+}
+fn postponed(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<ProviderObservationV1>,bool)>{
+    let article=d.unique(1..d.nodes.len(),|n|n.class("supportFAQArticle")&&n.class("supportFAQHighlight"))?;
+    let h=d.unique(d.descendants(article),|n|n.tag=="h1")?;if !d.text(h,256)?.starts_with("Animeverschiebungen"){return Err(());}
+    let p=d.unique(d.descendants(article),|n|n.tag=="p")?;let text=d.raw_text(p,32768)?;let mut out=vec![];let mut hashes=vec![];let mut partial=false;
+    for block in text.split("----------------------------------------------------------------------"){
+        let lines:Vec<_>=block.lines().map(str::trim).filter(|s|!s.is_empty()).collect();if lines.is_empty(){continue;}
+        let raw_title=lines[0].trim_start_matches(['⚠','\u{fe0f}','🚨','ℹ',' ']).trim();
+        let Ok(title_tracks)=notice_tracks(raw_title)else{partial=true;continue;};
+        let title=notice_title(raw_title);if title.is_empty()||title.len()>1024{continue;}
+        for(i,line)in lines.iter().enumerate(){
+            if !line.starts_with('•'){continue;}let coordinate=line.trim_start_matches('•').trim();let mut words=coordinate.split_whitespace();
+            // The explanatory example is not a rejected source fact or a missing release.
+            if coordinate=="Staffel Folge"{continue;}
+            let s=words.next().unwrap_or("");let e=words.next().unwrap_or("");
+            let season_only=e.is_empty()||(words.clone().next().is_none()&&(e.starts_with('(')||e.starts_with('['))&&notice_tracks(line).is_ok_and(|t|!t.is_empty()));
+            let coordinates=if season_only{s.strip_prefix('S').and_then(|s|route::integer(s,9999)).map(|s|(s,None))}
+                else{route::label(&route::join(&[s,e])).map(|(s,n)|(s,Some(n)))};
+            let Some((season,number))=coordinates else{partial=true;continue;};
+            let Ok(line_tracks)=notice_tracks(line)else{partial=true;continue;};
+            let line_tracks=if line_tracks.is_empty(){title_tracks.clone()}else{
+                if !title_tracks.is_empty()&&line_tracks.iter().any(|t|!title_tracks.contains(t)){partial=true;continue;}line_tracks};
+            let mut seen=false;
+            for date_line in lines.iter().skip(i+1).take_while(|s|!s.starts_with('•')){
+                let down=date_line.contains('▼');let up=date_line.contains('▲');
+                if down&&up{partial=true;continue;}
+                let marker=if down{ObservationScheduleMarker::POSTPONED}else if up{ObservationScheduleMarker::RESCHEDULED}else{continue;};seen=true;
+                let Ok(date_tracks)=notice_tracks(date_line)else{partial=true;continue;};
+                let tracks=if !line_tracks.is_empty()&&!date_tracks.is_empty(){
+                    if date_tracks.iter().any(|t|!line_tracks.contains(t)){partial=true;continue;}date_tracks.clone()
+                }else if !date_tracks.is_empty(){date_tracks.clone()}else if !line_tracks.is_empty(){line_tracks.clone()}else{vec![ObservationTrack::UNKNOWN]};
+                for track in tracks{
+                    let mut o=observation(c,r,None,title.into(),Some(season),None,number.clone(),track);o.source_raw_text=Some(route::join(&[coordinate," ",date_line]));
+                    if number.is_none(){
+                        o.diagnostics.push(diagnostic("SEASON_WIDE_NOTICE_NO_EPISODE"));
+                        let raw=o.source_raw_text.as_mut().ok_or(())?;
+                        for explanation in lines.iter().skip(i+1).take_while(|s|!s.starts_with('•')){
+                            if !explanation.contains('▼')&&!explanation.contains('▲'){raw.push(' ');raw.push_str(explanation);}
+                        }
+                    }
+                    if o.source_raw_text.as_ref().is_some_and(|s|s.len()>2048){partial=true;continue;}
+                    o.schedule_marker=marker.clone();o.correction_marker=Some("POSTPONEMENT_NOTICE_UNBOUND".into());o.diagnostics.push(diagnostic("UNBOUND_PROVIDER_IDENTITY"));push_unique(&mut out,&mut hashes,o)?;
+                }
+            }if !seen{partial=true;}
+        }
+    }Ok((out,partial))
+}
+pub fn parse(bytes:&[u8])->Vec<u8>{
+    let Ok(input)=decode::<ParseInputV1>(bytes,4*1024*1024)else{return error();};let Ok(plan)=release_plan(&input.context)else{return error();};
+    let _=abi::diagnostic_text("de.aniworld wire decoded");
+    if input.responses.iter().enumerate().any(|(i,r)|input.responses.iter().take(i).any(|v|v.request_id==r.request_id)){return error();}
+    let mut observations=vec![];let mut reports=vec![];
+    for r in &input.responses{
+        let result=(||->Result<(Vec<ProviderObservationV1>,bool)>{
+            let p=plan.iter().find(|p|p.request_id==r.request_id&&p.source_role==r.source_role).ok_or(())?;
+            let d=page::page(&r.status,r.http_status,r.final_url.as_deref(),r.body_utf8.as_deref(),r.source_hash.as_deref(),&p.url)?;
+            let _=abi::diagnostic_text("de.aniworld HTML parsed");
+            let facts=match r.source_role{SourceRole::CALENDAR|SourceRole::RECENT=>listing(&input.context,r,&d),SourceRole::POSTPONEMENT=>postponed(&input.context,r,&d),SourceRole::DIRECT=>Ok((direct(&input.context,r,&d,p)?,false))};
+            let _=abi::diagnostic_text("de.aniworld facts parsed");facts
+        })();
+        let(outcome,diagnostics)=match result{
+            Ok((facts,partial))=>{if observations.len()+facts.len()>512{return error();}observations.extend(facts);(if partial{ExtensionReportOutcome::PARTIAL}else{ExtensionReportOutcome::SUCCESS},if partial{vec![diagnostic("AMBIGUOUS_OR_INVALID_ROW")]}else{vec![]})},
+            Err(())=>(ExtensionReportOutcome::FAILURE,vec![diagnostic("INVALID_PAGE_OR_PROVENANCE")]),
+        };reports.push(ResponseReportV1{request_id:r.request_id.clone(),outcome,diagnostics});
+    }
+    let _=abi::diagnostic_text("de.aniworld release parse");let output=bounded::encode_parse_output(&ParseOutputV1{schema_version:1,observations,response_reports:reports},1024*1024).unwrap_or_else(|_|error());
+    let _=abi::diagnostic_text("de.aniworld wire encoded");output
+}

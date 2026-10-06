@@ -1,12 +1,11 @@
-name: Private preview publication (manually trusted, not independently verified)
-# Temporary, explicitly private. NOT the production release path (release.yml stays blocked). The keys are derived from the
-# repository secret PREVIEW_KEY_SEED held by the operator; this is not independent three-party custody. A valid signature only
-# means "matches the identity the user accepted in the app". No private key is ever written, printed or uploaded.
+name: AniWorld stable catalog publication
+# Stable versions with the existing operator-held identity. Manual trust remains explicit.
+# Signing secrets and historical key derivation stay unchanged for installed-source compatibility.
 on:
   workflow_dispatch:
   push:
     branches:
-      - ep07/private-preview
+      - stable
   schedule:
     # Only runs once this file is on the default branch. The index is valid for six days; republish at least that often.
     - cron: '17 3 * * *'
@@ -20,7 +19,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
-      CATALOG_BRANCH: private-preview-catalog
+      CATALOG_BRANCH: catalog
+      LEGACY_CATALOG_BRANCH: private-preview-catalog
       PREVIEW_KEY_SEED: ${{ secrets.PREVIEW_KEY_SEED }}
     steps:
       - name: Require the operator secret
@@ -33,6 +33,7 @@ jobs:
         with:
           fetch-depth: 0
           path: extension
+          ref: stable
       - name: Pinned toolchain and Python dependencies
         working-directory: extension
         run: |
@@ -41,7 +42,7 @@ jobs:
           python3 -m pip install -r requirements.txt
           bash tools/install_binaryen.sh "$RUNNER_TEMP/ep03-binaryen"
           echo "$RUNNER_TEMP/ep03-binaryen/bin" >> "$GITHUB_PATH"
-      - name: Private preview unit tests (no secret involved)
+      - name: Catalog unit tests (no secret involved)
         working-directory: extension
         env:
           PREVIEW_KEY_SEED: ''
@@ -55,21 +56,25 @@ jobs:
           bash tools/build_aniworld.sh build/aniworld-a
           bash tools/build_aniworld.sh build/aniworld-b
           cmp build/aniworld-a/wasm32v1-none/release/arex_aniworld.wasm build/aniworld-b/wasm32v1-none/release/arex_aniworld.wasm
-      - name: Build, sign and verify the private preview catalog
+      - name: Build, sign and verify the stable catalog
         id: chain
         working-directory: extension
         run: |
           set +x
           sequence="$(git rev-list --count HEAD)"
-          python3 tools/private_preview.py build \
+          version="$(cat sources/aniworld/VERSION)"
+          source_commit="$(git rev-parse HEAD)"
+          python3 tools/publish_catalog.py build \
             --module build/aniworld-a/wasm32v1-none/release/arex_aniworld.wasm \
             --output build/catalog \
             --source-repository "https://github.com/${{ github.repository }}" \
-            --source-commit "${{ github.sha }}" \
+            --source-commit "$source_commit" \
             --release-sequence "$sequence" \
+            --version "$version" \
             --origin https://raw.githubusercontent.com \
-            --base-path "/${{ github.repository }}/${CATALOG_BRANCH}/catalog" | tee build/preview-public.json
+            --base-path "/${{ github.repository }}/${CATALOG_BRANCH}" | tee build/catalog-public.json
           echo "sequence=$sequence" >> "$GITHUB_OUTPUT"
+          echo "source_commit=$source_commit" >> "$GITHUB_OUTPUT"
       - name: Publish the public catalog files
         env:
           PREVIEW_KEY_SEED: ''
@@ -85,25 +90,43 @@ jobs:
           else
             mkdir catalog-branch && cd catalog-branch && git init --quiet -b "$CATALOG_BRANCH" && git remote add origin "$remote" && cd ..
           fi
-          mkdir -p catalog-branch/catalog
-          cp extension/build/catalog/root.json extension/build/catalog/index.json catalog-branch/catalog/
-          # Packages are digest-addressed and immutable: older ones stay, nothing is overwritten.
-          cp -rn extension/build/catalog/dist catalog-branch/catalog/
-          printf '%s\n' 'PRIVATE PREVIEW catalog. Manually trusted by the user, not independently verified. Not a production release.' > catalog-branch/README.txt
+          # A stable version is immutable: a changed module/provenance requires a new version.
+          version="$(cat extension/sources/aniworld/VERSION)"
+          incoming="$(find extension/build/catalog/dist/de.aniworld/"$version" -name '*.arex' -printf '%f')"
+          if [ -d "catalog-branch/dist/de.aniworld/$version" ]; then
+            for existing in catalog-branch/dist/de.aniworld/"$version"/*.arex; do
+              [ "$(basename "$existing")" = "$incoming" ] || { echo '::error::Stable version already published with different bytes; bump VERSION.'; exit 1; }
+            done
+          fi
+          cp extension/build/catalog/root.json extension/build/catalog/index.json catalog-branch/
+          cp -rn extension/build/catalog/dist catalog-branch/
+          cp extension/docs/catalog.md catalog-branch/README.md
           cd catalog-branch
           git add -A
-          git diff --cached --quiet && echo 'catalog unchanged' || git commit --quiet -m "private preview catalog for ${{ github.sha }}"
+          git diff --cached --quiet || git commit --quiet -m "AniWorld catalog ${{ steps.chain.outputs.source_commit }}"
           git push --quiet origin "HEAD:${CATALOG_BRANCH}"
+          # The old URL continues to deliver authenticated updates, keeping installed-source IDs and trust intact.
+          cd "$GITHUB_WORKSPACE"
+          git clone --quiet --depth 1 --branch "$LEGACY_CATALOG_BRANCH" "$remote" legacy-catalog
+          cmp legacy-catalog/catalog/root.json extension/build/catalog/root.json
+          cp extension/build/catalog/root.json extension/build/catalog/index.json legacy-catalog/catalog/
+          cp -rn extension/build/catalog/dist legacy-catalog/catalog/
+          cp extension/docs/catalog.md legacy-catalog/README.md
+          rm -f legacy-catalog/README.txt
+          cd legacy-catalog
+          git add -A
+          git diff --cached --quiet || git commit --quiet -m "Compatible AniWorld stable update ${{ steps.chain.outputs.source_commit }}"
+          git push --quiet origin "HEAD:${LEGACY_CATALOG_BRANCH}"
       - name: Public summary
         run: |
           {
-            echo '## Private preview catalog (public values only)'
+            echo '## AniWorld 1.0 stable catalog (public values only)'
             echo ''
             echo 'Add this source URL in the app, then compare the fingerprint in the dialog with the one below:'
             echo ''
-            echo "    https://raw.githubusercontent.com/${{ github.repository }}/${CATALOG_BRANCH}/catalog"
+            echo "    https://raw.githubusercontent.com/${{ github.repository }}/${CATALOG_BRANCH}"
             echo ''
             echo '```json'
-            cat extension/build/preview-public.json
+            cat extension/build/catalog-public.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

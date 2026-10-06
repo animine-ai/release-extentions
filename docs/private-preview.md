@@ -1,3 +1,8 @@
+# Historical preview publication
+
+Superseded by [the stable catalog](catalog.md). The existing URL remains an update alias;
+new installations use the catalog URL. The following text documents the earlier rollout.
+
 # Private preview publication (temporary)
 
 Master decision of 2026-10-04: for a small private user group the app may use a concretely added source after the user explicitly

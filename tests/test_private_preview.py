@@ -15,6 +15,24 @@ class PrivatePreviewTest(unittest.TestCase):
     def chain(self, seed=SEED, commit='d' * 40, sequence=7, index_sequence=1000, now=NOW):
         return p.build_chain(seed, MODULE, 'https://github.com/example/repo', commit, sequence, '1.0.0-preview.%d' % sequence, ORIGIN, BASE, now, index_sequence)
 
+    def test_stable_promotion_preserves_the_accepted_root_and_publisher(self):
+        _, preview_root, preview_index, _ = self.chain(sequence=79)
+        data, stable_root, stable_index, pin = p.build_chain(SEED, MODULE, 'https://github.com/example/repo',
+            'e' * 40, 80, p.stable_version('1.0.0'), ORIGIN, '/example/repo/catalog', NOW, 1001)
+        self.assertEqual(a.jcs(preview_root), a.jcs(stable_root))
+        self.assertEqual(preview_index['signed']['entries'][0]['publisherId'], stable_index['signed']['entries'][0]['publisherId'])
+        manifest = a.verify_package(data, stable_index['signed']['entries'][0], stable_root, NOW)
+        self.assertEqual('1.0.0', manifest['version'])
+        self.assertGreater(manifest['releaseSequence'], preview_index['signed']['entries'][0]['releaseSequence'])
+        self.assertIn('/catalog/dist/de.aniworld/1.0.0/', stable_index['signed']['entries'][0]['packageUrl'])
+        a.verify_index(stable_index, stable_root, pin, NOW)
+
+    def test_stable_version_refuses_preview_and_noncanonical_versions(self):
+        for version in ('1.0.0-preview.79', '1.0', '01.0.0', '1.0.0+build', 'v1.0.0', ''):
+            with self.assertRaises(ValueError):
+                p.stable_version(version)
+        self.assertEqual('1.0.0', p.stable_version('1.0.0'))
+
     def test_chain_verifies_with_the_unchanged_strict_rules(self):
         data, root, index, pin = self.chain()
         a.verify_root(root, pin, NOW)

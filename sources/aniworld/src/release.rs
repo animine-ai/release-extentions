@@ -71,6 +71,19 @@ fn push_unique(out:&mut Vec<ProviderObservationV1>,hashes:&mut Vec<u64>,o:Provid
     if hashes.iter().zip(out.iter()).any(|(v,p)|*v==h&&p==&o){return Ok(());}
     if out.len()>=512{return Err(());}hashes.push(h);out.push(o);Ok(())
 }
+/// The coordinates a calendar row names: "S01E05" for an episode, and for a film either "Film 2" or season 0 ("S00E02"),
+/// which is where AniWorld keeps its films. A film has no source season, like the films of the recent list.
+fn calendar_coordinates(label:&str)->Option<(i32,String,bool)>{
+    let mut words=label.split_whitespace();let first=words.next()?;
+    if let Some((season,number))=route::label(first){return Some((season,number,false));}
+    if let Some(number)=route::film_label(first){return Some((0,number,true));}
+    if let Some(rest)=first.strip_prefix('S'){
+        if let Some((season,number))=rest.split_once('E'){
+            if !season.is_empty()&&season.bytes().all(|b|b==b'0'){if let Some(number)=route::integer(number,9999){return Some((0,number.to_string(),true));}}
+        }
+    }
+    let second=words.next()?;let number=route::film_label(&route::join(&[first," ",second]))?;Some((0,number,true))
+}
 fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<ProviderObservationV1>,bool,Vec<String>)>{
     let calendar=r.source_role==SourceRole::CALENDAR;heading(d,if calendar{"Animekalender"}else{"Neue Episoden"})?;
     let list=if calendar{0}else{d.unique(1..d.nodes.len(),|n|n.class("newEpisodeList"))?};
@@ -92,12 +105,15 @@ fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<P
             if !calendar&&d.descendants(row).filter(|i|d.nodes[*i].tag=="a").count()!=1{return Err(());}
             let title_node=d.unique(d.descendants(a),|n|if calendar{n.tag=="h3"&&n.class("seriesTitle")}else{n.tag=="strong"})?;
             let title=d.text(title_node,1024)?;
+            let mut calendar_film=false;
             let coordinates=if calendar{
                 let small=d.descendants(a).find(|i|d.nodes[*i].tag=="small").ok_or(())?;
-                let label=d.raw_text(small,256)?;route::label(label.split_whitespace().next().ok_or(())?).ok_or(())?
+                let label=d.raw_text(small,256)?;
+                let (season,number,is_film)=calendar_coordinates(&label).ok_or(())?;calendar_film=is_film;(season,number)
             }else{let coord=d.unique(d.descendants(a),|n|n.tag=="span"&&n.class("blue2"))?;let label=d.text(coord,64)?;
                 if film.is_some(){(0,route::film_label(&label).ok_or(())?)}else{route::label(&label).ok_or(())?}};
             let(source_season,source_episode)=coordinates;
+            let is_film=film.is_some()||calendar_film;
             if route.episode.as_ref().is_some_and(|number|number!=&source_episode){return Err(());}
             let number=source_episode;
             // Calendar series links prove no navigation season. Preserve the explicit
@@ -113,13 +129,20 @@ fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<P
             }else{let n=d.unique(d.descendants(a),|n|n.class("elementFloatRight"))?;(Cow::Owned(route::date(&d.text(n,128)?).ok_or(())?),None,false)};
             let tracks=if calendar{page::tracks_cached(d,row,&mut track_cache)?}else{page::tracks(d,row)?};
             let mut facts=vec![];for track in tracks{
-                let mut o=observation(c,r,Some(route.key.clone()),title.clone(),if film.is_some(){None}else{Some(source_season)},navigation_season,Some(number.clone()),track);
-                if film.is_some(){o.installment.kind=ObservationInstallmentKind::FILM;}
+                let mut o=observation(c,r,Some(route.key.clone()),title.clone(),if is_film{None}else{Some(source_season)},navigation_season,Some(number.clone()),track);
+                if is_film{o.installment.kind=ObservationInstallmentKind::FILM;}
                 o.source_date_text=Some(date.to_string());o.source_time_text=time.clone();o.approximate=approximate;
                 if o.track==ObservationTrack::UNKNOWN{o.diagnostics.push(diagnostic("UNKNOWN_LANGUAGE_TRACK"));}facts.push(o);
             }Ok(facts)
         })();
-        match parsed{Ok(facts)=>for o in facts{push_unique(&mut out,&mut hashes,o)?;},Err(())=>{partial=true;if skipped.len()<8&&!skipped.iter().any(|v|v==href){skipped.push(href.to_string());}}}
+        match parsed{Ok(facts)=>for o in facts{push_unique(&mut out,&mut hashes,o)?;},Err(())=>{
+            partial=true;
+            // The row's own label is named next to its link: the report then says which shape the page used.
+            let label:String=d.descendants(a).find(|i|d.nodes[*i].tag=="small").and_then(|i|d.raw_text(i,256).ok())
+                .map(|t|t.split_whitespace().next().unwrap_or("").chars().filter(|c|c.is_ascii_alphanumeric()).take(12).collect()).unwrap_or_default();
+            let shown=if label.is_empty(){href.to_string()}else{route::join(&[href,"(",&label,")"])};
+            if skipped.len()<8&&!skipped.iter().any(|v|*v==shown){skipped.push(shown);}
+        }}
     }
     Ok((out,partial,skipped))
 }

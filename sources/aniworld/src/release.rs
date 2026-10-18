@@ -3,6 +3,16 @@ use arex_sdk::*;
 use bounded::{decode,encode};
 use crate::{error,identity,page,route,html::Document,Result};
 fn diagnostic(code:&str)->ObservationDiagnosticV1{ObservationDiagnosticV1{code:code.into(),message:code.into()}}
+/// Names the rows a page could not give an observation for, so a partial report says which ones. The host only shows it.
+fn skipped_rows(code:&str,rows:&[String])->ObservationDiagnosticV1{
+    let mut message=String::from(code);
+    for(i,row)in rows.iter().enumerate(){
+        let next=alloc::format!("{}{}",if i==0{": "}else{" "},row.strip_prefix("/anime/stream/").unwrap_or(row));
+        if message.chars().count()+next.chars().count()>240{message.push_str(" …");break;}
+        message.push_str(&next);
+    }
+    ObservationDiagnosticV1{code:code.into(),message}
+}
 fn notice_tracks(line:&str)->Result<Vec<ObservationTrack>>{
     let low=line.to_ascii_lowercase().replace('[',"(").replace(']',")");let combined=low.contains("(sub+dub)")||low.contains("(dub+sub)");
     let sub=low.contains("(sub)");let dub=low.contains("(dub)");
@@ -58,10 +68,10 @@ fn push_unique(out:&mut Vec<ProviderObservationV1>,hashes:&mut Vec<u64>,o:Provid
     if hashes.iter().zip(out.iter()).any(|(v,p)|*v==h&&p==&o){return Ok(());}
     if out.len()>=512{return Err(());}hashes.push(h);out.push(o);Ok(())
 }
-fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<ProviderObservationV1>,bool)>{
+fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<ProviderObservationV1>,bool,Vec<String>)>{
     let calendar=r.source_role==SourceRole::CALENDAR;heading(d,if calendar{"Animekalender"}else{"Neue Episoden"})?;
     let list=if calendar{0}else{d.unique(1..d.nodes.len(),|n|n.class("newEpisodeList"))?};
-    let mut out=vec![];let mut hashes=vec![];let mut rows=0;let mut partial=false;
+    let mut out=vec![];let mut hashes=vec![];let mut rows=0;let mut partial=false;let mut skipped:Vec<String>=vec![];
     // A calendar day heading is shared by its episode links. Cache the validated
     // date, including a failed validation, so every row keeps the same outcome.
     let mut day_dates:Vec<(usize,Option<String>)>=vec![];
@@ -106,9 +116,9 @@ fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<P
                 if o.track==ObservationTrack::UNKNOWN{o.diagnostics.push(diagnostic("UNKNOWN_LANGUAGE_TRACK"));}facts.push(o);
             }Ok(facts)
         })();
-        match parsed{Ok(facts)=>for o in facts{push_unique(&mut out,&mut hashes,o)?;},Err(())=>partial=true}
+        match parsed{Ok(facts)=>for o in facts{push_unique(&mut out,&mut hashes,o)?;},Err(())=>{partial=true;if skipped.len()<8&&!skipped.iter().any(|v|v==href){skipped.push(href.to_string());}}}
     }
-    Ok((out,partial))
+    Ok((out,partial,skipped))
 }
 fn direct(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document,p:&RequestSpec)->Result<Vec<ProviderObservationV1>>{
     let t=c.targets.iter().find(|t|p.target_token.as_ref()==Some(&t.target_token)).ok_or(())?;
@@ -116,7 +126,7 @@ fn direct(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document,p:&RequestSpec)-
     let(title,available)=page::episode(d,&p.url,navigation_season,number)?;if !available.contains(&t.track){return Ok(vec![]);}
     Ok(vec![observation(c,r,Some(t.provider_series_key.clone()),title,Some(source_season),Some(navigation_season),Some(number.into()),t.track.clone())])
 }
-fn postponed(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<ProviderObservationV1>,bool)>{
+fn postponed(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<ProviderObservationV1>,bool,Vec<String>)>{
     let article=d.unique(1..d.nodes.len(),|n|n.class("supportFAQArticle")&&n.class("supportFAQHighlight"))?;
     let h=d.unique(d.descendants(article),|n|n.tag=="h1")?;if !d.text(h,256)?.starts_with("Animeverschiebungen"){return Err(());}
     let p=d.unique(d.descendants(article),|n|n.tag=="p")?;let text=d.raw_text(p,32768)?;let mut out=vec![];let mut hashes=vec![];let mut partial=false;
@@ -160,7 +170,7 @@ fn postponed(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec
                 }
             }if !seen{partial=true;}
         }
-    }Ok((out,partial))
+    }Ok((out,partial,vec![]))
 }
 pub fn parse(bytes:&[u8])->Vec<u8>{
     let Ok(input)=decode::<ParseInputV1>(bytes,4*1024*1024)else{return error();};let Ok(plan)=release_plan(&input.context)else{return error();};
@@ -168,15 +178,15 @@ pub fn parse(bytes:&[u8])->Vec<u8>{
     if input.responses.iter().enumerate().any(|(i,r)|input.responses.iter().take(i).any(|v|v.request_id==r.request_id)){return error();}
     let mut observations=vec![];let mut reports=vec![];
     for r in &input.responses{
-        let result=(||->Result<(Vec<ProviderObservationV1>,bool)>{
+        let result=(||->Result<(Vec<ProviderObservationV1>,bool,Vec<String>)>{
             let p=plan.iter().find(|p|p.request_id==r.request_id&&p.source_role==r.source_role).ok_or(())?;
             let d=page::page(&r.status,r.http_status,r.final_url.as_deref(),r.body_utf8.as_deref(),r.source_hash.as_deref(),&p.url)?;
             let _=abi::diagnostic_text("de.aniworld HTML parsed");
-            let facts=match r.source_role{SourceRole::CALENDAR|SourceRole::RECENT=>listing(&input.context,r,&d),SourceRole::POSTPONEMENT=>postponed(&input.context,r,&d),SourceRole::DIRECT=>Ok((direct(&input.context,r,&d,p)?,false))};
+            let facts=match r.source_role{SourceRole::CALENDAR|SourceRole::RECENT=>listing(&input.context,r,&d),SourceRole::POSTPONEMENT=>postponed(&input.context,r,&d),SourceRole::DIRECT=>Ok((direct(&input.context,r,&d,p)?,false,vec![]))};
             let _=abi::diagnostic_text("de.aniworld facts parsed");facts
         })();
         let(outcome,diagnostics)=match result{
-            Ok((facts,partial))=>{if observations.len()+facts.len()>512{return error();}observations.extend(facts);(if partial{ExtensionReportOutcome::PARTIAL}else{ExtensionReportOutcome::SUCCESS},if partial{vec![diagnostic("AMBIGUOUS_OR_INVALID_ROW")]}else{vec![]})},
+            Ok((facts,partial,skipped))=>{if observations.len()+facts.len()>512{return error();}observations.extend(facts);(if partial{ExtensionReportOutcome::PARTIAL}else{ExtensionReportOutcome::SUCCESS},if partial{vec![skipped_rows("AMBIGUOUS_OR_INVALID_ROW",&skipped)]}else{vec![]})},
             Err(())=>(ExtensionReportOutcome::FAILURE,vec![diagnostic("INVALID_PAGE_OR_PROVENANCE")]),
         };reports.push(ResponseReportV1{request_id:r.request_id.clone(),outcome,diagnostics});
     }

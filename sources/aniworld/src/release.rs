@@ -5,11 +5,14 @@ use crate::{error,identity,page,route,html::Document,Result};
 fn diagnostic(code:&str)->ObservationDiagnosticV1{ObservationDiagnosticV1{code:code.into(),message:code.into()}}
 /// Names the rows a page could not give an observation for, so a partial report says which ones. The host only shows it.
 fn skipped_rows(code:&str,rows:&[String])->ObservationDiagnosticV1{
-    let mut message=String::from(code);
+    // No core::fmt here: formatting pulls in function-pointer calls, a table and an element segment, which the host's frozen
+    // module profile refuses.
+    let mut message=String::from(code);let mut used=message.chars().count();
     for(i,row)in rows.iter().enumerate(){
-        let next=alloc::format!("{}{}",if i==0{": "}else{" "},row.strip_prefix("/anime/stream/").unwrap_or(row));
-        if message.chars().count()+next.chars().count()>240{message.push_str(" …");break;}
-        message.push_str(&next);
+        let row=row.strip_prefix("/anime/stream/").unwrap_or(row);let separator=if i==0{": "}else{" "};
+        let width=separator.chars().count()+row.chars().count();
+        if used+width>240{message.push_str(" …");break;}
+        message.push_str(separator);message.push_str(row);used+=width;
     }
     ObservationDiagnosticV1{code:code.into(),message}
 }

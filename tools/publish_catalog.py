@@ -96,6 +96,30 @@ def write_catalog(output: Path, data: bytes, root: dict, index: dict, version: s
 def fingerprint(root: dict) -> str:
     return a.sha(a.jcs(root['signed']))
 
+def check_module_profile(module: bytes) -> None:
+    """Refuses what the app's frozen core-module profile refuses, so a bad module fails here and not on the phone.
+
+    The host accepts no table and no element segment (no indirect calls), at most one import and seven exports.
+    """
+    def uleb(buf: bytes, i: int):
+        value = shift = 0
+        while True:
+            byte = buf[i]; i += 1
+            value |= (byte & 0x7f) << shift; shift += 7
+            if byte < 0x80:
+                return value, i
+    a.check(module[:8] == b'\0asm\1\0\0\0', 'not a wasm32 core module')
+    i, counts = 8, {}
+    while i < len(module):
+        section = module[i]; i += 1
+        size, i = uleb(module, i)
+        if section != 0:
+            counts[section], _ = uleb(module, i)
+        i += size
+    a.check(4 not in counts and 9 not in counts, 'module has a table or element segment (indirect calls): the host profile refuses it')
+    a.check(counts.get(2, 0) <= 1 and counts.get(7, 0) <= 7, 'module has more imports or exports than the host profile allows')
+    a.check(counts.get(3, 0) <= 10_000 and counts.get(10, 0) <= 10_000, 'module has more functions than the host profile allows')
+
 def stable_version(value: str) -> str:
     """A stable release has a canonical major.minor.patch version, without preview/build suffixes."""
     import re
@@ -121,6 +145,7 @@ def cli():
         sys.exit('PREVIEW_KEY_SEED is not set: create the repository secret first (see docs/private-preview.md)')
     now = datetime.now(timezone.utc).replace(microsecond=0)
     version = stable_version(args.version)
+    check_module_profile(args.module.read_bytes())
     data, root, index, pin = build_chain(seed, args.module.read_bytes(), args.source_repository, args.source_commit, args.release_sequence,
                                          version, args.origin, args.base_path, now, int(now.timestamp()))
     args.output.mkdir(parents=True, exist_ok=True)

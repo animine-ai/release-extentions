@@ -75,6 +75,30 @@ fn target()->ExtensionTargetV1{ExtensionTargetV1{target_token:"t1".into(),provid
     assert_eq!(bad_time.observations.len(),1);assert_eq!(bad_time.observations[0].track,ObservationTrack::DE_DUB);
     assert_eq!(bad_time.response_reports[0].outcome,ExtensionReportOutcome::PARTIAL);
 }
+#[test]fn a_calendar_film_row_is_read_as_a_film_in_both_spellings(){
+    for label in ["S00E02","Film 2","Film2"]{
+        let body=CALENDAR.replace("S01E01<img class=\"flag\" title=\"Episode 1 mit deutschem Untertitel\"",&alloc::format!("{}<img class=\"flag\" title=\"Episode 1 mit deutschem Untertitel\"",label));
+        let o=listing(SourceRole::CALENDAR,&body);
+        assert_eq!(o.response_reports[0].outcome,ExtensionReportOutcome::SUCCESS,"{}",label);
+        let film=o.observations.iter().find(|o|o.installment.kind==ObservationInstallmentKind::FILM).expect("a film observation");
+        assert_eq!(film.installment.number.as_deref(),Some("2"),"{}",label);
+        assert!(film.source_season.is_none(),"{}",label);
+    }
+}
+#[test]fn an_unreadable_calendar_label_is_named_next_to_its_link(){
+    let body=CALENDAR.replace("S01E01<img class=\"flag\" title=\"Episode 1 mit deutschem Untertitel\"","OVA<img class=\"flag\" title=\"Episode 1 mit deutschem Untertitel\"");
+    let o=listing(SourceRole::CALENDAR,&body);
+    assert_eq!(o.response_reports[0].outcome,ExtensionReportOutcome::PARTIAL);
+    assert!(o.response_reports[0].diagnostics[0].message.contains("fixture-series(OVA)"),"{}",o.response_reports[0].diagnostics[0].message);
+}
+#[test]fn a_partial_report_names_the_rows_it_skipped(){
+    let bad_time=listing(SourceRole::CALENDAR,&CALENDAR.replace("~ 12:00 Uhr","~ 25:99 Uhr"));
+    let d=&bad_time.response_reports[0].diagnostics[0];
+    assert_eq!(d.code,"AMBIGUOUS_OR_INVALID_ROW");
+    assert!(d.message.starts_with("AMBIGUOUS_OR_INVALID_ROW: "),"{}",d.message);
+    assert!(d.message.len()<=256&&!d.message.contains("/anime/stream/"),"{}",d.message);
+    let clean=listing(SourceRole::CALENDAR,CALENDAR);assert!(clean.response_reports[0].diagnostics.is_empty());
+}
 #[test]fn postponements_are_unbound_facts(){let o=listing(SourceRole::POSTPONEMENT,POSTPONEMENT);assert_eq!(o.observations.len(),2);assert!(o.observations.iter().all(|o|o.provider_series_key.is_none()&&o.claim_kind==ObservationClaimKind::CORRECTION&&o.parsed_timestamp.is_none()&&o.schedule_marker==ObservationScheduleMarker::POSTPONED));assert_ne!(o.observations[0].track,o.observations[1].track);}
 #[test]fn combined_postponement_track_expands_to_sub_and_dub(){let body=POSTPONEMENT.replace("(Sub)","(Sub+Dub)");let o=listing(SourceRole::POSTPONEMENT,&body);assert_eq!(o.response_reports[0].outcome,ExtensionReportOutcome::SUCCESS);assert_eq!(o.observations.len(),3);assert!(o.observations.iter().any(|o|o.track==ObservationTrack::DE_SUB));assert!(o.observations.iter().filter(|o|o.track==ObservationTrack::DE_DUB).count()>=2);}
 #[test]fn conflicting_notice_markers_do_not_choose_a_track_or_direction(){

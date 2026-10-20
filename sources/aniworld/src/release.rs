@@ -3,6 +3,19 @@ use arex_sdk::*;
 use bounded::{decode,encode};
 use crate::{error,identity,page,route,html::Document,Result};
 fn diagnostic(code:&str)->ObservationDiagnosticV1{ObservationDiagnosticV1{code:code.into(),message:code.into()}}
+/// Names the rows a page could not give an observation for, so a partial report says which ones. The host only shows it.
+fn skipped_rows(code:&str,rows:&[String])->ObservationDiagnosticV1{
+    // No core::fmt here: formatting pulls in function-pointer calls, a table and an element segment, which the host's frozen
+    // module profile refuses.
+    let mut message=String::from(code);let mut used=message.chars().count();
+    for(i,row)in rows.iter().enumerate(){
+        let row=row.strip_prefix("/anime/stream/").unwrap_or(row);let separator=if i==0{": "}else{" "};
+        let width=separator.chars().count()+row.chars().count();
+        if used+width>240{message.push_str(" …");break;}
+        message.push_str(separator);message.push_str(row);used+=width;
+    }
+    ObservationDiagnosticV1{code:code.into(),message}
+}
 fn notice_tracks(line:&str)->Result<Vec<ObservationTrack>>{
     let low=line.to_ascii_lowercase().replace('[',"(").replace(']',")");let combined=low.contains("(sub+dub)")||low.contains("(dub+sub)");
     let sub=low.contains("(sub)");let dub=low.contains("(dub)");
@@ -58,10 +71,23 @@ fn push_unique(out:&mut Vec<ProviderObservationV1>,hashes:&mut Vec<u64>,o:Provid
     if hashes.iter().zip(out.iter()).any(|(v,p)|*v==h&&p==&o){return Ok(());}
     if out.len()>=512{return Err(());}hashes.push(h);out.push(o);Ok(())
 }
-fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<ProviderObservationV1>,bool)>{
+/// The coordinates a calendar row names: "S01E05" for an episode, and for a film either "Film 2" or season 0 ("S00E02"),
+/// which is where AniWorld keeps its films. A film has no source season, like the films of the recent list.
+fn calendar_coordinates(label:&str)->Option<(i32,String,bool)>{
+    let mut words=label.split_whitespace();let first=words.next()?;
+    if let Some((season,number))=route::label(first){return Some((season,number,false));}
+    if let Some(number)=route::film_label(first){return Some((0,number,true));}
+    if let Some(rest)=first.strip_prefix('S'){
+        if let Some((season,number))=rest.split_once('E'){
+            if !season.is_empty()&&season.bytes().all(|b|b==b'0'){if let Some(number)=route::integer(number,9999){return Some((0,number.to_string(),true));}}
+        }
+    }
+    let second=words.next()?;let number=route::film_label(&route::join(&[first," ",second]))?;Some((0,number,true))
+}
+fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<ProviderObservationV1>,bool,Vec<String>)>{
     let calendar=r.source_role==SourceRole::CALENDAR;heading(d,if calendar{"Animekalender"}else{"Neue Episoden"})?;
     let list=if calendar{0}else{d.unique(1..d.nodes.len(),|n|n.class("newEpisodeList"))?};
-    let mut out=vec![];let mut hashes=vec![];let mut rows=0;let mut partial=false;
+    let mut out=vec![];let mut hashes=vec![];let mut rows=0;let mut partial=false;let mut skipped:Vec<String>=vec![];
     // A calendar day heading is shared by its episode links. Cache the validated
     // date, including a failed validation, so every row keeps the same outcome.
     let mut day_dates:Vec<(usize,Option<String>)>=vec![];
@@ -79,12 +105,15 @@ fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<P
             if !calendar&&d.descendants(row).filter(|i|d.nodes[*i].tag=="a").count()!=1{return Err(());}
             let title_node=d.unique(d.descendants(a),|n|if calendar{n.tag=="h3"&&n.class("seriesTitle")}else{n.tag=="strong"})?;
             let title=d.text(title_node,1024)?;
+            let mut calendar_film=false;
             let coordinates=if calendar{
                 let small=d.descendants(a).find(|i|d.nodes[*i].tag=="small").ok_or(())?;
-                let label=d.raw_text(small,256)?;route::label(label.split_whitespace().next().ok_or(())?).ok_or(())?
+                let label=d.raw_text(small,256)?;
+                let (season,number,is_film)=calendar_coordinates(&label).ok_or(())?;calendar_film=is_film;(season,number)
             }else{let coord=d.unique(d.descendants(a),|n|n.tag=="span"&&n.class("blue2"))?;let label=d.text(coord,64)?;
                 if film.is_some(){(0,route::film_label(&label).ok_or(())?)}else{route::label(&label).ok_or(())?}};
             let(source_season,source_episode)=coordinates;
+            let is_film=film.is_some()||calendar_film;
             if route.episode.as_ref().is_some_and(|number|number!=&source_episode){return Err(());}
             let number=source_episode;
             // Calendar series links prove no navigation season. Preserve the explicit
@@ -100,15 +129,22 @@ fn listing(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<P
             }else{let n=d.unique(d.descendants(a),|n|n.class("elementFloatRight"))?;(Cow::Owned(route::date(&d.text(n,128)?).ok_or(())?),None,false)};
             let tracks=if calendar{page::tracks_cached(d,row,&mut track_cache)?}else{page::tracks(d,row)?};
             let mut facts=vec![];for track in tracks{
-                let mut o=observation(c,r,Some(route.key.clone()),title.clone(),if film.is_some(){None}else{Some(source_season)},navigation_season,Some(number.clone()),track);
-                if film.is_some(){o.installment.kind=ObservationInstallmentKind::FILM;}
+                let mut o=observation(c,r,Some(route.key.clone()),title.clone(),if is_film{None}else{Some(source_season)},navigation_season,Some(number.clone()),track);
+                if is_film{o.installment.kind=ObservationInstallmentKind::FILM;}
                 o.source_date_text=Some(date.to_string());o.source_time_text=time.clone();o.approximate=approximate;
                 if o.track==ObservationTrack::UNKNOWN{o.diagnostics.push(diagnostic("UNKNOWN_LANGUAGE_TRACK"));}facts.push(o);
             }Ok(facts)
         })();
-        match parsed{Ok(facts)=>for o in facts{push_unique(&mut out,&mut hashes,o)?;},Err(())=>partial=true}
+        match parsed{Ok(facts)=>for o in facts{push_unique(&mut out,&mut hashes,o)?;},Err(())=>{
+            partial=true;
+            // The row's own label is named next to its link: the report then says which shape the page used.
+            let label:String=d.descendants(a).find(|i|d.nodes[*i].tag=="small").and_then(|i|d.raw_text(i,256).ok())
+                .map(|t|t.split_whitespace().next().unwrap_or("").chars().filter(|c|c.is_ascii_alphanumeric()).take(12).collect()).unwrap_or_default();
+            let shown=if label.is_empty(){href.to_string()}else{route::join(&[href,"(",&label,")"])};
+            if skipped.len()<8&&!skipped.iter().any(|v|*v==shown){skipped.push(shown);}
+        }}
     }
-    Ok((out,partial))
+    Ok((out,partial,skipped))
 }
 fn direct(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document,p:&RequestSpec)->Result<Vec<ProviderObservationV1>>{
     let t=c.targets.iter().find(|t|p.target_token.as_ref()==Some(&t.target_token)).ok_or(())?;
@@ -116,7 +152,7 @@ fn direct(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document,p:&RequestSpec)-
     let(title,available)=page::episode(d,&p.url,navigation_season,number)?;if !available.contains(&t.track){return Ok(vec![]);}
     Ok(vec![observation(c,r,Some(t.provider_series_key.clone()),title,Some(source_season),Some(navigation_season),Some(number.into()),t.track.clone())])
 }
-fn postponed(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<ProviderObservationV1>,bool)>{
+fn postponed(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec<ProviderObservationV1>,bool,Vec<String>)>{
     let article=d.unique(1..d.nodes.len(),|n|n.class("supportFAQArticle")&&n.class("supportFAQHighlight"))?;
     let h=d.unique(d.descendants(article),|n|n.tag=="h1")?;if !d.text(h,256)?.starts_with("Animeverschiebungen"){return Err(());}
     let p=d.unique(d.descendants(article),|n|n.tag=="p")?;let text=d.raw_text(p,32768)?;let mut out=vec![];let mut hashes=vec![];let mut partial=false;
@@ -160,7 +196,7 @@ fn postponed(c:&ExtensionContextV1,r:&ResponseEnvelope,d:&Document)->Result<(Vec
                 }
             }if !seen{partial=true;}
         }
-    }Ok((out,partial))
+    }Ok((out,partial,vec![]))
 }
 pub fn parse(bytes:&[u8])->Vec<u8>{
     let Ok(input)=decode::<ParseInputV1>(bytes,4*1024*1024)else{return error();};let Ok(plan)=release_plan(&input.context)else{return error();};
@@ -168,15 +204,15 @@ pub fn parse(bytes:&[u8])->Vec<u8>{
     if input.responses.iter().enumerate().any(|(i,r)|input.responses.iter().take(i).any(|v|v.request_id==r.request_id)){return error();}
     let mut observations=vec![];let mut reports=vec![];
     for r in &input.responses{
-        let result=(||->Result<(Vec<ProviderObservationV1>,bool)>{
+        let result=(||->Result<(Vec<ProviderObservationV1>,bool,Vec<String>)>{
             let p=plan.iter().find(|p|p.request_id==r.request_id&&p.source_role==r.source_role).ok_or(())?;
             let d=page::page(&r.status,r.http_status,r.final_url.as_deref(),r.body_utf8.as_deref(),r.source_hash.as_deref(),&p.url)?;
             let _=abi::diagnostic_text("de.aniworld HTML parsed");
-            let facts=match r.source_role{SourceRole::CALENDAR|SourceRole::RECENT=>listing(&input.context,r,&d),SourceRole::POSTPONEMENT=>postponed(&input.context,r,&d),SourceRole::DIRECT=>Ok((direct(&input.context,r,&d,p)?,false))};
+            let facts=match r.source_role{SourceRole::CALENDAR|SourceRole::RECENT=>listing(&input.context,r,&d),SourceRole::POSTPONEMENT=>postponed(&input.context,r,&d),SourceRole::DIRECT=>Ok((direct(&input.context,r,&d,p)?,false,vec![]))};
             let _=abi::diagnostic_text("de.aniworld facts parsed");facts
         })();
         let(outcome,diagnostics)=match result{
-            Ok((facts,partial))=>{if observations.len()+facts.len()>512{return error();}observations.extend(facts);(if partial{ExtensionReportOutcome::PARTIAL}else{ExtensionReportOutcome::SUCCESS},if partial{vec![diagnostic("AMBIGUOUS_OR_INVALID_ROW")]}else{vec![]})},
+            Ok((facts,partial,skipped))=>{if observations.len()+facts.len()>512{return error();}observations.extend(facts);(if partial{ExtensionReportOutcome::PARTIAL}else{ExtensionReportOutcome::SUCCESS},if partial{vec![skipped_rows("AMBIGUOUS_OR_INVALID_ROW",&skipped)]}else{vec![]})},
             Err(())=>(ExtensionReportOutcome::FAILURE,vec![diagnostic("INVALID_PAGE_OR_PROVENANCE")]),
         };reports.push(ResponseReportV1{request_id:r.request_id.clone(),outcome,diagnostics});
     }

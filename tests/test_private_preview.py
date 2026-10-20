@@ -91,3 +91,15 @@ def utc(text):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ModuleProfileTest(unittest.TestCase):
+    HEADER = b'\0asm\1\0\0\0'
+
+    def test_a_module_with_a_table_or_element_segment_is_refused(self):
+        import publish_catalog as pc
+        pc.check_module_profile(self.HEADER)
+        pc.check_module_profile(self.HEADER + b'\x06\x01\x00')  # an empty global section is fine
+        for section in (b'\x04\x01\x00', b'\x09\x01\x00'):  # table, element: the host profile has no indirect calls
+            with self.assertRaises(BaseException):
+                pc.check_module_profile(self.HEADER + section)
